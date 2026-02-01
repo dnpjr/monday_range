@@ -26,7 +26,7 @@ For each week:
 - **Monday High**: \(H_M\)  
 - **Monday Low**: \(L_M\)  
 - **Range size**: \(R = H_M - L_M\)  
-- **Midpoint**: \(M = \frac{H_M + L_M}{2}\)
+- **Midpoint**: \(M = (H_M + L_M) / 2\)
 
 This creates a weekly reference “box” used as a liquidity boundary.
 
