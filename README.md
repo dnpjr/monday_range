@@ -37,7 +37,7 @@ From **Tuesday onward**, look for a *sweep* beyond the Monday range followed by 
 **Long setup (sweep below)**
 - A candle trades **below** \(L_M\)
 - Then closes **back above** \(L_M\)
-- → enter **long** on the next bar open (or on the close, depending on your chosen convention)
+- → enter **long** on the next bar open (or on the close, depending on the chosen convention)
 
 **Short setup (sweep above)**
 - A candle trades **above** \(H_M\)
@@ -65,7 +65,7 @@ Typical structure:
 └── README.md
 ```
 
-(Exact filenames may differ slightly depending on the version you’re using.)
+(Exact filenames may differ slightly depending on the version it is using.)
 
 ---
 
@@ -91,7 +91,7 @@ The key goal is to quantify:
 
 ### Multi-symbol support
 
-You can research multiple instruments, e.g.:
+The research module supports multiple instruments, e.g.:
 
 - `BTC-USD`
 - `^GSPC` (S&P 500)
@@ -166,7 +166,7 @@ Why this is useful:
 
 ### Trade management knobs
 
-Common parameters you can expose (or already have exposed):
+Key configurable parameters include:
 
 - `symbol`, `interval`, `period`
 - `initial_capital`
@@ -233,7 +233,7 @@ This is expected for a portfolio/research demo.
 
 ## Extensions / Improvements
 
-If you wanted to evolve this into something genuinely research-grade:
+To evolve this into something genuinely research-grade:
 
 ### 1) Regime filters (time-series analysis)
 Only trade when conditions are favourable, e.g.:
@@ -276,7 +276,7 @@ This often works better than trying to predict raw returns.
 
 ## Takeaways
 
-- Splitting research and backtesting code makes your process clearer and more defensible.
+- Splitting research and backtesting code makes the process clearer and more defensible.
 - In imbalanced/conditional setups, it’s critical to quantify hit rates and failure modes.
 - A well-known discretionary pattern is rarely robust “as-is”; regime filters and execution realism matter.
 - The right next step is **time-series aware validation** (walk-forward) and **robustness checks**, not just adding complexity.
