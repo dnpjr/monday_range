@@ -1,0 +1,12 @@
+{
+  "total_signals": 86,
+  "p_hit_mid": 0.7093023255813954,
+  "p_hit_full": 0.37209302325581395,
+  "avg_mae_mid": 0.3663183134130171,
+  "p90_mae_mid": 0.9948566834263644,
+  "avg_mae_full": 0.3599068867830629,
+  "p90_mae_full": 0.9856672810885789,
+  "avg_reward_ratio": 0.8453829415796446,
+  "p_sweep_retest": 0.7209302325581395,
+  "p_sweep_retest_winners": 0.40625
+}

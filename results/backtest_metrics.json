@@ -1,0 +1,20 @@
+{
+  "equity": {
+    "final_equity": 9862.242831083548,
+    "total_return": -0.013775716891645251,
+    "sharpe": -0.19605575631056824,
+    "max_drawdown": -0.0740560747490093
+  },
+  "trades": {
+    "num_trades": 83,
+    "win_rate": 0.25301204819277107,
+    "avg_pnl": -12.036331233790344,
+    "median_pnl": 0.0,
+    "profit_factor": 0.43509141628630577,
+    "by_reason": {
+      "STOP": 51,
+      "TP2": 18,
+      "FRIDAY": 14
+    }
+  }
+}
