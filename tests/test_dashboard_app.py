@@ -6,6 +6,8 @@ from streamlit.testing.v1 import AppTest
 
 from src.portfolio_results import PROTOCOL_ROOT, RUN_ROOT
 
+DASHBOARD_PATH = Path(__file__).resolve().parents[1] / "dashboard.py"
+
 
 def _sealed_bytes() -> dict[str, str]:
     files = sorted(RUN_ROOT.rglob("*.json"))
@@ -23,7 +25,7 @@ def _sealed_bytes() -> dict[str, str]:
 class DashboardAppTests(unittest.TestCase):
     def test_all_five_pages_render_from_sealed_results(self):
         before = _sealed_bytes()
-        app = AppTest.from_file("dashboard.py", default_timeout=30).run()
+        app = AppTest.from_file(DASHBOARD_PATH, default_timeout=30).run()
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(app.radio[0].value, "Overview")
         self.assertEqual(app.title[0].value, "Monday Range Research")
@@ -45,7 +47,7 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(before, _sealed_bytes())
 
     def test_explore_requires_an_explicit_run(self):
-        app = AppTest.from_file("dashboard.py", default_timeout=30).run()
+        app = AppTest.from_file(DASHBOARD_PATH, default_timeout=30).run()
         app.radio[0].set_value("Explore").run()
         self.assertEqual([button.label for button in app.button], ["Run exploratory backtest"])
         self.assertNotIn("explore_result", app.session_state)
