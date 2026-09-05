@@ -59,6 +59,10 @@ class Trade:
     net_pnl: float | None = None
     gross_pnl: float | None = None
     fees_paid: float | None = None
+    entry_slippage_cost: float | None = None
+    exit_slippage_cost: float | None = None
+    total_slippage_cost: float | None = None
+    combined_execution_cost: float | None = None
     holding_hours: float | None = None
     entry_weekday_utc: int | None = None
     entry_hour_utc: int | None = None
@@ -137,6 +141,8 @@ def backtest_sweep_fade(
     single_target_level: str = "tp2",
     intrabar_policy: str = "conservative_stop_first",
     close_open_position_at_end: bool = True,
+    entry_start_utc: str | pd.Timestamp | None = None,
+    entry_end_exclusive_utc: str | pd.Timestamp | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the Monday-range sweep/fade strategy with marked portfolio accounting.
 
@@ -172,6 +178,14 @@ def backtest_sweep_fade(
         raise ValueError("max_entry_day_utc must be between 0 (Monday) and 6 (Sunday).")
     if max_entry_hour_utc is not None and not (0 <= int(max_entry_hour_utc) <= 23):
         raise ValueError("max_entry_hour_utc must be between 0 and 23.")
+    entry_start = pd.Timestamp(entry_start_utc) if entry_start_utc is not None else None
+    entry_end = pd.Timestamp(entry_end_exclusive_utc) if entry_end_exclusive_utc is not None else None
+    if entry_start is not None:
+        entry_start = entry_start.tz_localize("UTC") if entry_start.tzinfo is None else entry_start.tz_convert("UTC")
+    if entry_end is not None:
+        entry_end = entry_end.tz_localize("UTC") if entry_end.tzinfo is None else entry_end.tz_convert("UTC")
+    if entry_start is not None and entry_end is not None and entry_end <= entry_start:
+        raise ValueError("entry_end_exclusive_utc must be later than entry_start_utc")
     if sma_period is not None and int(sma_period) < 1:
         raise ValueError("sma_period must be >= 1 when provided.")
     if min_range_pct is not None and max_range_pct is not None and float(min_range_pct) > float(max_range_pct):
@@ -214,6 +228,8 @@ def backtest_sweep_fade(
         "gross_notional": 0.0,
         "trade_pnl": 0.0,
         "fees_paid": 0.0,
+        "slippage_cost": 0.0,
+        "combined_execution_cost": 0.0,
         "turnover": 0.0,
         "cumulative_turnover": 0.0,
         "exposed": 0.0,
@@ -242,6 +258,8 @@ def backtest_sweep_fade(
     trade_pnl_accum = 0.0
     gross_pnl_accum = 0.0
     fees_paid_accum = 0.0
+    entry_slippage_cost_accum = 0.0
+    exit_slippage_cost_accum = 0.0
     trade_risk_capital = 0.0
     trade_max_notional = 0.0
     sizing_limited_by = "risk"
@@ -296,6 +314,13 @@ def backtest_sweep_fade(
                 return True
         return max_entry_hour_utc is None or hour <= int(max_entry_hour_utc)
 
+    def protocol_window_allows(ts_utc: pd.Timestamp) -> bool:
+        if entry_start is not None and ts_utc < entry_start:
+            return False
+        if entry_end is not None and ts_utc >= entry_end:
+            return False
+        return True
+
     for i in range(1, len(df)):
         prev = df.iloc[i - 1]
         row = df.iloc[i]
@@ -329,7 +354,7 @@ def backtest_sweep_fade(
         range_pct = (float(rng) / abs(float(mon_mid))) if (pd.notna(mon_mid) and float(mon_mid) != 0.0) else np.nan
 
         # Signal is based only on the completed previous bar; execution is this bar's open.
-        if (not in_pos) and row["is_tradeable"] and (not has_traded_week):
+        if (not in_pos) and row["is_tradeable"] and (not has_traded_week) and protocol_window_allows(ts_utc):
             signal_side = None
             if strategy == "current_monday_range":
                 if row["weekday"] < 4:
@@ -434,12 +459,17 @@ def backtest_sweep_fade(
                     trade_max_notional = allowed_notional
                     sizing_limited_by = "max_leverage" if leverage_sized_qty < risk_sized_qty else "stop_risk"
                     entry_fee = calculate_entry_fee(entry, qty, fee_bps=fee_bps)
+                    entry_slippage_cost = abs(candidate_entry - float(row["open"])) * qty
                     cash -= entry_fee
                     bar_turnover += entry_notional
                     df.at[ts, "fees_paid"] += entry_fee
+                    df.at[ts, "slippage_cost"] += entry_slippage_cost
+                    df.at[ts, "combined_execution_cost"] += entry_fee + entry_slippage_cost
                     trade_pnl_accum = -entry_fee
                     gross_pnl_accum = 0.0
                     fees_paid_accum = entry_fee
+                    entry_slippage_cost_accum = entry_slippage_cost
+                    exit_slippage_cost_accum = 0.0
                     entry_weekday_utc = int(ts_utc.weekday())
                     entry_hour_utc = int(ts_utc.hour)
                     entry_mon_range = float(rng)
@@ -451,11 +481,12 @@ def backtest_sweep_fade(
                     has_traded_week = True
 
         def exit_quantity(exit_qty: float, raw_price: float) -> tuple[float, float, float, float]:
-            nonlocal cash, qty, trade_pnl_accum, gross_pnl_accum, fees_paid_accum, bar_turnover
+            nonlocal cash, qty, trade_pnl_accum, gross_pnl_accum, fees_paid_accum, exit_slippage_cost_accum, bar_turnover
             assert side is not None
             exit_px = apply_slippage(raw_price, side, action="exit", slippage_bps=slippage_bps)
             gross = (exit_px - entry) * exit_qty if side == "LONG" else (entry - exit_px) * exit_qty
             fee = calculate_exit_fee(exit_px, exit_qty, fee_bps=fee_bps)
+            exit_slippage_cost = abs(exit_px - float(raw_price)) * exit_qty
             net = gross - fee
             cash += net
             qty -= exit_qty
@@ -464,9 +495,12 @@ def backtest_sweep_fade(
             trade_pnl_accum += net
             gross_pnl_accum += gross
             fees_paid_accum += fee
+            exit_slippage_cost_accum += exit_slippage_cost
             bar_turnover += abs(exit_px * exit_qty)
             df.at[ts, "trade_pnl"] += net
             df.at[ts, "fees_paid"] += fee
+            df.at[ts, "slippage_cost"] += exit_slippage_cost
+            df.at[ts, "combined_execution_cost"] += fee + exit_slippage_cost
             return net, exit_px, fee, gross
 
         def finish_trade(reason: str, raw_price: float) -> None:
@@ -491,6 +525,10 @@ def backtest_sweep_fade(
                     net_pnl=trade_pnl_accum,
                     gross_pnl=gross_pnl_accum,
                     fees_paid=fees_paid_accum,
+                    entry_slippage_cost=entry_slippage_cost_accum,
+                    exit_slippage_cost=exit_slippage_cost_accum,
+                    total_slippage_cost=entry_slippage_cost_accum + exit_slippage_cost_accum,
+                    combined_execution_cost=fees_paid_accum + entry_slippage_cost_accum + exit_slippage_cost_accum,
                     holding_hours=holding_hours,
                     entry_weekday_utc=entry_weekday_utc,
                     entry_hour_utc=entry_hour_utc,
@@ -626,6 +664,7 @@ def backtest_sweep_fade(
     df.attrs.update(
         {
             "strategy": strategy,
+            "accounting_version": "marked_equity_v1",
             "signal_count": int(signal_count),
             "mark_price": "bar_close",
             "risk_mode": "fraction" if risk_fraction is not None else "fixed_dollar",
@@ -635,6 +674,9 @@ def backtest_sweep_fade(
             "stop_mode": resolved_stop_mode,
             "legacy_stop_mode": requested_stop_mode if requested_stop_mode in LEGACY_STOP_MODE_MAP else None,
             "close_open_position_at_end": bool(close_open_position_at_end),
+            "entry_start_utc": None if entry_start is None else entry_start.isoformat(),
+            "entry_end_exclusive_utc": None if entry_end is None else entry_end.isoformat(),
+            "short_position_interpretation": "synthetic_research_position_on_binance_spot_price_series",
         }
     )
     return df, trades_df

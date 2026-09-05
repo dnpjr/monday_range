@@ -109,6 +109,7 @@ def build_summary(
     final_realized = float(df_out["realized_pnl"].dropna().iloc[-1]) if "realized_pnl" in df_out and len(df_out["realized_pnl"].dropna()) else final_cash - float(initial_cash)
     final_unrealized = float(df_out["unrealized_pnl"].dropna().iloc[-1]) if "unrealized_pnl" in df_out and len(df_out["unrealized_pnl"].dropna()) else final_equity - final_cash
     total_fees = float(df_out["fees_paid"].sum()) if "fees_paid" in df_out.columns else 0.0
+    total_slippage = float(df_out["slippage_cost"].sum()) if "slippage_cost" in df_out.columns else 0.0
     exposure = float(df_out["exposed"].mean()) if "exposed" in df_out.columns else (float((df_out["gross_notional"] > 0).mean()) if "gross_notional" in df_out.columns else 0.0)
     total_turnover = float(df_out["turnover"].sum()) if "turnover" in df_out.columns else 0.0
     average_equity = float(df_out["equity"].dropna().mean()) if len(df_out["equity"].dropna()) else float(initial_cash)
@@ -141,6 +142,16 @@ def build_summary(
         "best_trade": best_trade,
         "worst_trade": worst_trade,
         "total_fees_paid": total_fees,
+        "entry_slippage_cost": (
+            float(pd.to_numeric(trades["entry_slippage_cost"], errors="coerce").fillna(0.0).sum())
+            if "entry_slippage_cost" in trades.columns else 0.0
+        ),
+        "exit_slippage_cost": (
+            float(pd.to_numeric(trades["exit_slippage_cost"], errors="coerce").fillna(0.0).sum())
+            if "exit_slippage_cost" in trades.columns else 0.0
+        ),
+        "total_slippage_cost": total_slippage,
+        "combined_execution_cost": total_fees + total_slippage,
         "profit_factor": tm.get("profit_factor"),
         "exposure_fraction": exposure,
         "total_turnover_notional": total_turnover,

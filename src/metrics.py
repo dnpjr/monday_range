@@ -71,6 +71,8 @@ def trade_metrics(trades: pd.DataFrame) -> dict:
             "profit_factor": None,
             "total_net_pnl": 0.0,
             "total_fees": 0.0,
+            "total_slippage_cost": 0.0,
+            "combined_execution_cost": 0.0,
             "by_reason": {},
         }
 
@@ -102,6 +104,16 @@ def trade_metrics(trades: pd.DataFrame) -> dict:
             float(pd.to_numeric(trades["fees_paid"], errors="coerce").fillna(0.0).sum())
             if "fees_paid" in trades.columns
             else None
+        ),
+        "total_slippage_cost": (
+            float(pd.to_numeric(trades["total_slippage_cost"], errors="coerce").fillna(0.0).sum())
+            if "total_slippage_cost" in trades.columns
+            else 0.0
+        ),
+        "combined_execution_cost": (
+            float(pd.to_numeric(trades["combined_execution_cost"], errors="coerce").fillna(0.0).sum())
+            if "combined_execution_cost" in trades.columns
+            else 0.0
         ),
         "by_reason": trades["reason"].value_counts().to_dict(),
     }
