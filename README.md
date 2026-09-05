@@ -303,6 +303,12 @@ Run backtest:
 python backtest_monday_range.py --symbol BTC-USD --interval 4h --period 2y
 ```
 
+Run read-only dashboard:
+
+```bash
+streamlit run dashboard.py
+```
+
 ---
 
 ## Disclaimer

@@ -3,12 +3,14 @@ import pandas as pd
 import numpy as np
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
+from .signals import sweep_rejection_signal
 
 @dataclass
 class SignalOutcome:
     iso_year: int
     iso_week: int
     side: str  # LONG/SHORT
+    signal_time: pd.Timestamp | None
     entry_time: pd.Timestamp
     entry_price: float
     mon_high: float
@@ -62,6 +64,7 @@ def analyze_weekly_sweep_signals(df: pd.DataFrame) -> pd.DataFrame:
         entry_side = None
         entry_price = None
         sweep_extreme = None
+        signal_time = None
 
         for ts, row in tradeable.iterrows():
             # previous bar within the week
@@ -70,20 +73,13 @@ def analyze_weekly_sweep_signals(df: pd.DataFrame) -> pd.DataFrame:
                 continue
             prev = week.iloc[loc - 1]
 
-            # long: sweep below low then close back inside
-            if (prev["low"] < mon_low) and (prev["close"] > mon_low):
-                entry_side = "LONG"
+            signal_side = sweep_rejection_signal(prev, mon_low=mon_low, mon_high=mon_high)
+            if signal_side is not None:
+                entry_side = signal_side
+                signal_time = prev.name
                 entry_time = ts
                 entry_price = float(row["open"])
-                sweep_extreme = float(prev["low"])
-                break
-
-            # short: sweep above high then close back inside
-            if (prev["high"] > mon_high) and (prev["close"] < mon_high):
-                entry_side = "SHORT"
-                entry_time = ts
-                entry_price = float(row["open"])
-                sweep_extreme = float(prev["high"])
+                sweep_extreme = float(prev["low"] if signal_side == "LONG" else prev["high"])
                 break
 
         if entry_time is None:
@@ -148,6 +144,7 @@ def analyze_weekly_sweep_signals(df: pd.DataFrame) -> pd.DataFrame:
             iso_year=iso_year,
             iso_week=iso_week,
             side=entry_side,
+            signal_time=signal_time,
             entry_time=entry_time,
             entry_price=entry_price,
             mon_high=mon_high,
