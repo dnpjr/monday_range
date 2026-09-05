@@ -67,6 +67,7 @@ def _comparison(canonical: pd.DataFrame, path: Path) -> dict[str, Any]:
     common = left.index.intersection(right.index)
     differing = int((~left.loc[common].eq(right.loc[common])).any(axis=1).sum())
     return {
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "rows": int(len(old)),
         "first": old["open_time"].min().isoformat(),
         "last": old["open_time"].max().isoformat(),
@@ -125,6 +126,7 @@ The gaps are venue-history facts in the canonical data. They remain explicit.
 ### Monday 1h cache
 
 - Rows / coverage: `{monday['rows']}` / `{monday['first']}` through `{monday['last']}`
+- Legacy file SHA-256: `{monday['sha256']}`
 - Shared rows: `{monday['shared_rows']}`
 - Canonical-only / legacy-only rows: `{monday['canonical_only_rows']}` / `{monday['legacy_only_rows']}`
 - Shared rows with different OHLCV: `{monday['differing_shared_ohlcv_rows']}`
@@ -134,13 +136,14 @@ The one differing row is `2026-05-20 14:00 UTC`. The Monday cache captured it wh
 ### Crypto research lab 1h cache
 
 - Rows / coverage: `{lab['rows']}` / `{lab['first']}` through `{lab['last']}`
+- Legacy file SHA-256: `{lab['sha256']}`
 - Shared rows: `{lab['shared_rows']}`
 - Canonical-only / legacy-only rows: `{lab['canonical_only_rows']}` / `{lab['legacy_only_rows']}`
 - Shared rows with different OHLCV: `{lab['differing_shared_ohlcv_rows']}`
 
 The lab starts 24 hours later and ends 24 hours later. Its overlap agrees with canonical v1. The lab repository was read only throughout this work.
 
-The separately downloaded Monday 4h file and lab 1d file are legacy caches. Their final saved periods were incomplete. They are superseded for reproducible evaluation by deterministic views derived from canonical 1h data, but have not been deleted.
+The separately downloaded Monday 4h file (SHA-256 `f7f09ff6b7acf69d1a2d2b7d1a667f7a256b81f819285c4a726b3d2c6ad00149`) and lab 1d file (SHA-256 `14775dac3c52ba4025583ff8b45135fcb68d762ecf24372ff7d4f4e566723592`) are legacy caches. Their final saved periods were incomplete. They are superseded for reproducible evaluation by deterministic views derived from canonical 1h data, but have not been deleted.
 
 ## Deterministic resampling
 
@@ -157,6 +160,7 @@ Derived views are generated on demand and are not separate authoritative dataset
 - Higher-timeframe evaluation is derived from canonical 1h through `src.canonical_data.load_canonical_ohlcv`.
 - Diagnostics use the dataset version recorded by the originating run.
 - The dashboard Data Manager and paper cycle remain live/runtime paths. Their downloaded evaluation candles exclude nominally incomplete bars; the paper cycle also applies its existing close-time guard.
+- The dashboard's standard backtest and walk-forward actions inherit the canonical runner defaults. Its standalone Research Lab and Range Sweep exploratory pages still read selected live/legacy caches; their outputs must not be treated as canonical evaluation until those callers explicitly select a canonical dataset.
 - Historical `data/binance/*.csv`, saved backtests, sweeps, walk-forward outputs, and paper state remain legacy/runtime artifacts.
 
 Future run configuration records dataset version/hash, code commit, strategy configuration, accounting version, risk base, leverage, fees, slippage, intrabar policy, timeframe, requested date range, and UTC run timestamp.

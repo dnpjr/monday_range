@@ -204,7 +204,7 @@ class ParameterSweepTests(unittest.TestCase):
         ), patch("run_parameter_sweep.add_monday_range", return_value=ohlc), patch(
             "run_parameter_sweep.backtest_sweep_fade", side_effect=fake_backtest
         ):
-            results, _ = run_sweep(
+            results, out_dir = run_sweep(
                 symbol="BTCUSDT",
                 interval="1h",
                 start="2024-01-01",
@@ -216,6 +216,8 @@ class ParameterSweepTests(unittest.TestCase):
                 tp2_to_full_values=[0.5],
                 friday_cutoff_hours_utc=[22, 23],
             )
+            with open(out_dir / "sweep_config.json", "r", encoding="utf-8") as handle:
+                saved_config = json.load(handle)
 
         self.assertEqual(len(calls), 4)
         self.assertTrue(all(fee == 12.0 and slip == 7.0 for fee, slip in calls))
@@ -224,6 +226,8 @@ class ParameterSweepTests(unittest.TestCase):
         self.assertTrue((results["slippage_bps"] == 7.0).all())
         self.assertIn("total_fees_paid", results.columns)
         self.assertIn("cost_drag_pct", results.columns)
+        self.assertEqual(saved_config["dataset_version"], "btcusdt_binance_spot_1h_v1")
+        self.assertEqual(len(saved_config["dataset_sha256"]), 64)
 
 
 if __name__ == "__main__":

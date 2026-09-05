@@ -17,6 +17,8 @@ The emphasis is on:
 
 > **Methodology status:** The canonical runner now uses marked bar-close equity, current-equity risk sizing, a 1× gross-notional cap, gap-aware fills, conservative stop-first OHLC handling, and end-of-data closure. See [Backtest methodology](docs/METHODOLOGY.md). Existing files under `results/`, `data/backtests/`, and `data/sweeps/` are legacy artifacts from the pre-correction engine and are not comparable with new runs.
 
+> **Canonical data:** Reproducible BTCUSDT research defaults to the immutable Binance spot 1h dataset `btcusdt_binance_spot_1h_v1`. Its file hash, coverage, seven genuine exchange gaps, strict 4h/1d derivation policy, and legacy-cache comparison are recorded in [the versioned data-quality report](docs/data/btcusdt_binance_spot_1h_v1.md). Files under `data/binance/` remain live/legacy caches and are not canonical research inputs.
+
 ---
 
 ## Concept

@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from run_backtest import build_summary, filter_ohlc_window, load_cached_ohlc
+from src.canonical_data import DATASET_VERSION as DEFAULT_DATASET_VERSION, experiment_metadata
 from src.backtest import backtest_sweep_fade
 from src.features import add_monday_range
 
@@ -316,13 +317,14 @@ def run_sweep(
     risk_base: str = "current_equity",
     max_leverage: float = 1.0,
     intrabar_policy: str = "conservative_stop_first",
+    dataset_version: str | None = DEFAULT_DATASET_VERSION,
 ) -> tuple[pd.DataFrame, Path]:
     initial_cash = 10_000.0
 
-    ohlc = load_cached_ohlc(symbol, interval)
+    ohlc = load_cached_ohlc(symbol, interval, dataset_version=dataset_version)
     ohlc = filter_ohlc_window(ohlc, start, end)
     if ohlc.empty:
-        raise ValueError("No cached candles remain after applying start/end filters.")
+        raise ValueError("No evaluation candles remain after applying start/end filters.")
 
     df_features = add_monday_range(ohlc)
     rows: list[dict[str, Any]] = []
@@ -467,6 +469,14 @@ def run_sweep(
         "stop_range_fractions": ([1.0] if stop_range_fractions is None else stop_range_fractions),
         "combinations": len(combos),
     }
+    if dataset_version is not None:
+        sweep_config.update(
+            experiment_metadata(
+                dataset_version=dataset_version, interval=interval, start=start, end=end
+            )
+        )
+        sweep_config["evaluation_first_timestamp"] = str(ohlc.index.min())
+        sweep_config["evaluation_last_timestamp"] = str(ohlc.index.max())
     out_dir = write_sweep_outputs(
         output_root=output_dir,
         symbol=symbol,
@@ -478,12 +488,13 @@ def run_sweep(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Run Monday range parameter sweep on cached Binance candles.")
+    ap = argparse.ArgumentParser(description="Run Monday range parameter sweep on versioned canonical Binance candles.")
     ap.add_argument("--symbol", default="BTCUSDT")
     ap.add_argument("--interval", default="1h")
     ap.add_argument("--start", default=None)
     ap.add_argument("--end", default=None)
     ap.add_argument("--output_dir", default="data/sweeps")
+    ap.add_argument("--dataset_version", default=DEFAULT_DATASET_VERSION)
     ap.add_argument("--fee_bps", type=float, default=0.0)
     ap.add_argument("--slippage_bps", type=float, default=0.0)
     ap.add_argument("--risk_fractions", nargs="+", default=["0.005,0.01,0.02"])
@@ -557,6 +568,7 @@ def main() -> None:
         risk_base=args.risk_base,
         max_leverage=float(args.max_leverage),
         intrabar_policy=args.intrabar_policy,
+        dataset_version=args.dataset_version,
     )
 
     print("=== Parameter sweep complete ===")

@@ -195,6 +195,11 @@ class RunBacktestTests(unittest.TestCase):
         self.assertEqual(kwargs["stop_range_fraction"], 0.5)
         self.assertEqual(out["summary"]["strategy"], "sweep_retest")
         self.assertEqual(out["summary"]["signal_count"], 2)
+        self.assertEqual(out["config"]["dataset_version"], "btcusdt_binance_spot_1h_v1")
+        self.assertEqual(len(out["config"]["dataset_sha256"]), 64)
+        self.assertEqual(out["config"]["accounting_version"], "marked_equity_v1")
+        self.assertIn("code_commit", out["config"])
+        self.assertIn("run_timestamp_utc", out["config"])
 
 
 if __name__ == "__main__":

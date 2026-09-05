@@ -134,7 +134,12 @@ def compute_buy_hold_benchmark(summary: dict[str, Any], config: dict[str, Any], 
     start = summary.get("start_used") or config.get("start")
     end = summary.get("end_used") or config.get("end")
     try:
-        ohlc = load_cached_ohlc(symbol, interval, cache_dir=cache_dir)
+        ohlc = load_cached_ohlc(
+            symbol,
+            interval,
+            cache_dir=cache_dir,
+            dataset_version=config.get("dataset_version"),
+        )
         ohlc = filter_ohlc_window(ohlc, start, end)
     except (FileNotFoundError, ValueError):
         return None

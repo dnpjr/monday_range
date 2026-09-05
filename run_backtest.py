@@ -12,6 +12,12 @@ from src.features import add_monday_range
 from src.backtest import backtest_sweep_fade, canonical_stop_mode
 from src.metrics import equity_metrics, trade_metrics
 from src.research import analyze_weekly_sweep_signals
+from src.canonical_data import (
+    DATASET_VERSION as DEFAULT_DATASET_VERSION,
+    SYMBOL as CANONICAL_SYMBOL,
+    experiment_metadata,
+    load_canonical_ohlcv,
+)
 
 
 def bars_per_year_from_interval(interval: str) -> float:
@@ -39,7 +45,18 @@ def _end_exclusive(value: str | None) -> pd.Timestamp | None:
     return ts
 
 
-def load_cached_ohlc(symbol: str, interval: str, cache_dir: str | Path = "data/binance") -> pd.DataFrame:
+def load_cached_ohlc(
+    symbol: str,
+    interval: str,
+    cache_dir: str | Path = "data/binance",
+    dataset_version: str | None = None,
+) -> pd.DataFrame:
+    if dataset_version is not None:
+        if symbol != CANONICAL_SYMBOL:
+            raise ValueError(f"Canonical dataset {dataset_version!r} is for {CANONICAL_SYMBOL}, not {symbol}.")
+        canonical = load_canonical_ohlcv(interval, dataset_version=dataset_version)
+        canonical.attrs["dataset_version"] = dataset_version
+        return canonical[["open", "high", "low", "close"]].copy()
     p = Path(cache_dir) / f"{symbol}_{interval}.csv"
     if not p.exists():
         raise FileNotFoundError(f"Cached file not found: {p}")
@@ -131,8 +148,10 @@ def build_summary(
         "max_drawdown": em.get("max_drawdown"),
         "mark_price": df_out.attrs.get("mark_price", "bar_close"),
         "annualization_periods_per_year": em.get("annualization_periods_per_year"),
-        "start_used": str(df_out.index.min()) if start_used is None else start_used,
-        "end_used": str(df_out.index.max()) if end_used is None else end_used,
+        "start_used": str(df_out.index.min()),
+        "end_used": str(df_out.index.max()),
+        "requested_start": start_used,
+        "requested_end": end_used,
     }
 
 
@@ -191,6 +210,7 @@ def run_backtest_cached(
     exit_style: str = "partial_tp2",
     single_target_mode: bool | None = None,  # legacy alias
     single_target_level: str = "tp2",
+    dataset_version: str | None = DEFAULT_DATASET_VERSION,
     output_dir: str | Path = "data/backtests",
 ) -> dict[str, Any]:
     valid_strategies = {"current_monday_range", "sweep_retest"}
@@ -232,10 +252,10 @@ def run_backtest_cached(
     initial_cash = 10_000.0
     risk_per_trade = initial_cash * float(risk_fraction)
 
-    ohlc = load_cached_ohlc(symbol, interval)
+    ohlc = load_cached_ohlc(symbol, interval, dataset_version=dataset_version)
     ohlc = filter_ohlc_window(ohlc, start, end)
     if ohlc.empty:
-        raise ValueError("No cached candles remain after applying start/end filters.")
+        raise ValueError("No evaluation candles remain after applying start/end filters.")
 
     df = add_monday_range(ohlc)
     legacy_signal_count = None
@@ -331,6 +351,19 @@ def run_backtest_cached(
         "signal_count": legacy_signal_count,
         "initial_cash": initial_cash,
     }
+    if dataset_version is not None:
+        config.update(
+            experiment_metadata(
+                dataset_version=dataset_version,
+                interval=interval,
+                start=start,
+                end=end,
+            )
+        )
+        summary["dataset_version"] = config["dataset_version"]
+        summary["dataset_sha256"] = config["dataset_sha256"]
+        config["evaluation_first_timestamp"] = str(ohlc.index.min())
+        config["evaluation_last_timestamp"] = str(ohlc.index.max())
     out_dir = write_outputs(
         output_root=output_dir,
         symbol=symbol,
@@ -348,7 +381,7 @@ def run_backtest_cached(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Run Monday range backtest from cached Binance candles.")
+    ap = argparse.ArgumentParser(description="Run Monday range backtest from versioned canonical Binance candles.")
     ap.add_argument("--strategy", choices=["current_monday_range", "sweep_retest"], default="current_monday_range")
     ap.add_argument("--symbol", default="BTCUSDT")
     ap.add_argument("--interval", default="1h")
@@ -386,6 +419,7 @@ def main() -> None:
     ap.add_argument("--single_target_mode", action=argparse.BooleanOptionalAction, default=None, help="Legacy alias; prefer --exit_style.")
     ap.add_argument("--single_target_level", choices=["tp1", "tp2"], default="tp2")
     ap.add_argument("--output_dir", default="data/backtests")
+    ap.add_argument("--dataset_version", default=DEFAULT_DATASET_VERSION)
     args = ap.parse_args()
 
     result = run_backtest_cached(
@@ -418,6 +452,7 @@ def main() -> None:
         move_stop_to_breakeven_after_tp1=bool(args.move_stop_to_breakeven_after_tp1),
         breakeven_includes_fees=bool(args.breakeven_includes_fees),
         exit_style=args.exit_style,
+        dataset_version=args.dataset_version,
         single_target_mode=(None if args.single_target_mode is None else bool(args.single_target_mode)),
         single_target_level=args.single_target_level,
         output_dir=args.output_dir,

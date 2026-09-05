@@ -95,6 +95,8 @@ class WalkForwardTests(unittest.TestCase):
             self.assertEqual(len(wf), 1)
             self.assertIn("percentage_positive_out_of_sample", wf.columns)
             self.assertIn("worst_out_of_sample_return_pct", wf.columns)
+            self.assertEqual(result["config"]["dataset_version"], "btcusdt_binance_spot_1h_v1")
+            self.assertEqual(len(result["config"]["dataset_sha256"]), 64)
 
     def test_run_walk_forward_calls_train_then_test_per_fold(self) -> None:
         ohlc = _synthetic_ohlc("2021-01-01", "2025-12-31")

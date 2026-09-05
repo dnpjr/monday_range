@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from run_backtest import build_summary, filter_ohlc_window, load_cached_ohlc
+from src.canonical_data import DATASET_VERSION as DEFAULT_DATASET_VERSION, experiment_metadata
 from run_parameter_sweep import (
     build_sweep_row,
     parse_float_grid,
@@ -343,6 +344,7 @@ def run_walk_forward(
     risk_base: str = "current_equity",
     max_leverage: float = 1.0,
     intrabar_policy: str = "conservative_stop_first",
+    dataset_version: str | None = DEFAULT_DATASET_VERSION,
     # Legacy compatibility args (optional)
     risk_fractions: list[float] | None = None,
     tp2_to_full_values: list[float] | None = None,
@@ -376,9 +378,9 @@ def run_walk_forward(
             # Sweep/retest walk-forward is defined with range-fraction stops.
             stop_range_fractions = [float(stop_range_fractions[0])] if stop_range_fractions else [0.75]
 
-    ohlc = load_cached_ohlc(symbol, interval)
+    ohlc = load_cached_ohlc(symbol, interval, dataset_version=dataset_version)
     if ohlc.empty:
-        raise ValueError("Cached OHLC is empty.")
+        raise ValueError("Evaluation OHLC is empty.")
 
     latest_cached_date = _to_iso_date(ohlc.index.max())
     if yearly_mode:
@@ -677,6 +679,12 @@ def run_walk_forward(
         "parameter_stability": {k: float(v) for k, v in stability.items()},
         "latest_cached_date": latest_cached_date,
     }
+    if dataset_version is not None:
+        config.update(
+            experiment_metadata(
+                dataset_version=dataset_version, interval=interval, start=None, end=None
+            )
+        )
     with open(out_dir / "config.json", "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
@@ -691,7 +699,7 @@ def run_walk_forward(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Run walk-forward optimisation on cached Binance candles.")
+    ap = argparse.ArgumentParser(description="Run walk-forward optimisation on versioned canonical Binance candles.")
     ap.add_argument("--strategy", choices=["sweep_retest"], default="sweep_retest")
     ap.add_argument("--symbol", default="BTCUSDT")
     ap.add_argument("--interval", default="1h")
@@ -702,6 +710,7 @@ def main() -> None:
     ap.add_argument("--slippage_bps", type=float, default=DEFAULT_SWEEP_RETEST_SLIPPAGE_BPS)
     ap.add_argument("--top_n", type=int, default=3)
     ap.add_argument("--output_dir", default="data/walk_forward")
+    ap.add_argument("--dataset_version", default=DEFAULT_DATASET_VERSION)
 
     ap.add_argument("--risk_fraction", type=float, default=0.02)
     ap.add_argument("--risk_base", choices=["current_equity", "initial_capital"], default="current_equity")
@@ -740,6 +749,7 @@ def main() -> None:
         risk_base=args.risk_base,
         max_leverage=float(args.max_leverage),
         intrabar_policy=args.intrabar_policy,
+        dataset_version=args.dataset_version,
         tp1_range_fractions=parse_float_grid(args.tp1_range_fractions, name="tp1_range_fractions"),
         stop_range_fractions=parse_float_grid(args.stop_range_fractions, name="stop_range_fractions"),
         tp1_close_fractions=parse_float_grid(args.tp1_close_fractions, name="tp1_close_fractions"),
