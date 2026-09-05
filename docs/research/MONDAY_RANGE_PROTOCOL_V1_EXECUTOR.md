@@ -9,13 +9,14 @@ validate
 init
 development
 walk-forward
+audit
 final-selection
 robustness
 uncertainty
 holdout
 ```
 
-There is no `all` stage. `holdout` additionally requires `--confirm-holdout` and all sealed prerequisites.
+There is no `all` stage. `walk-forward` requires the sealed development stage, `final-selection` requires a passed sealed audit, and `holdout` requires `--confirm-holdout` plus every sealed pre-holdout prerequisite.
 
 ## Window and leakage rules
 
@@ -60,16 +61,20 @@ reports/experiments/monday_range_protocol_v1/<run_id>/
 ├── dataset_manifest.json
 ├── code_provenance.json
 ├── candidate_grid.json
-├── development.json
+├── development/{candidate_ranking.json,baseline.json}
 ├── fold_1/{selection.json,validation.json}
 ├── fold_2/{selection.json,validation.json}
 ├── fold_3/{selection.json,validation.json}
+├── walk_forward_aggregate.json
+├── walk_forward_audit.json
 ├── final_fit/{training_scores.json,final_candidate.json}
 ├── robustness/results.json
 ├── uncertainty/weekly_bootstrap.json
 ├── charts/
-└── holdout/{ACCESS.json,canonical_results.json}
+└── holdout/{ACCESS.json,canonical_results.json,uncertainty.json,robustness.json}
 ```
+
+The experiment root also contains one atomic `HOLDOUT_ACCESS.json` registry. It applies across run IDs, so creating another bundle cannot reopen Protocol V1's holdout.
 
 Every JSON artifact has a `.sha256` sidecar. Critical artifacts also embed their semantic payload hash. Existing artifacts cannot be overwritten; a rerun requires a new run ID. Every later stage verifies the files it consumes.
 
@@ -81,19 +86,22 @@ Holdout authorization fails unless all of the following verify:
 
 1. frozen protocol hash;
 2. canonical dataset hash;
-3. code commit and passing test record;
-4. all three sealed training selections;
-5. matching sealed validation results;
-6. final candidate selected over exactly the amended pre-holdout interval;
-7. final candidate protocol, dataset, code and artifact hashes;
-8. explicit `--confirm-holdout` action.
+3. clean recorded code commit and an executor-verified full test run;
+4. complete development ranking and separately sealed frozen baseline;
+5. all three exact 18-candidate training rankings and their mechanical winners;
+6. matching sealed validation results and the passed execution/accounting audit;
+7. the stitched 72-week walk-forward artifact and its hashes;
+8. final candidate selected over exactly the amended pre-holdout interval;
+9. complete pre-holdout robustness and uncertainty artifacts;
+10. final candidate protocol, dataset, code and artifact hashes;
+11. explicit `--confirm-holdout` action.
 
-Authorization writes the immutable `holdout/ACCESS.json` marker before evaluation. A failed or repeated run cannot overwrite it and must use a new experiment bundle.
+Authorization atomically writes the global access registry and the bundle's immutable `holdout/ACCESS.json` before any holdout data is loaded. The global marker remains consumed if execution subsequently fails. Production holdout execution is restricted to the canonical experiment root.
 
 ## Uncertainty and robustness
 
-Weekly uncertainty uses a four-week moving-block bootstrap with 10,000 replications and seed `20260905`. Blocks are sampled from complete Monday-to-Monday units. Genuine missing Binance hours inside a week do not remove that week from the primary series. The report contains the point estimate, 2.5th, 50th and 97.5th percentiles, and the frozen `lower bound > 0` null rule.
+Weekly uncertainty uses a four-week moving-block bootstrap with 10,000 replications and seed `20260905`. Blocks are sampled from complete Monday-to-Monday units. The pre-holdout estimate uses the sealed 72-week aggregate walk-forward validation series. A distinct confirmatory estimate is created from the selected candidate's 52-week holdout series after the canonical holdout result is sealed. Both report point estimates and the 2.5th, 50th and 97.5th percentiles for mean weekly return, annualized return, maximum drawdown, and average trade return. The frozen null rule is `lower bound > 0`.
 
-Robustness keeps the selected candidate fixed. It produces baseline, 1.5× and 2× costs; conservative and target-first intrabar results; long-only and short-only decompositions; calendar-year and non-overlapping 24-week breakdowns; all frozen-grid neighbors as diagnostics; and a separate result excluding the three documented gap weeks. These outputs never call the selection function or replace the final candidate.
+Pre-holdout robustness uses the full `[2021-05-31, 2025-05-19)` interval and keeps the selected candidate fixed. It produces baseline, 1.5× and 2× costs; conservative and target-first intrabar results; long-only and short-only decompositions; calendar-year and consecutive non-overlapping 24-week breakdowns; all frozen-grid neighbors as diagnostics; and a separate result excluding the three documented gap weeks. It is explicitly diagnostic and in-sample for the final selected candidate. After the canonical holdout result is sealed, only the preregistered cost stresses and target-first sensitivity are run on holdout. Robustness never replaces the selected candidate.
 
-The implementation and test task must use synthetic fixtures. Running `development`, `walk-forward`, `final-selection`, `robustness`, `uncertainty`, or `holdout` against the canonical loader is a research execution and belongs to the separately authorized experiment task.
+Training evaluations retain metrics only. Full marked-equity artifacts are kept for the frozen baseline, the three validation winners, the stitched walk-forward series, and the two canonical holdout configurations. Repeated robustness artifacts omit hourly curves to keep the sealed bundle compact while retaining metrics, weekly returns, trades, and accounting summaries.

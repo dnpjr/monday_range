@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import pathlib
 import sys
 import tempfile
@@ -21,8 +22,14 @@ from src.protocol_v1 import (
     ExperimentBundle,
     HoldoutLockedError,
     ProtocolError,
+    ProtocolExecutor,
+    aggregate_walk_forward_artifact,
+    audit_evaluation_artifact,
+    audit_holdout_results,
+    audit_preholdout_robustness,
     assert_holdout_ready,
     authorize_holdout,
+    bootstrap_from_evaluation_artifact,
     collect_code_provenance,
     evaluate_candidate_window,
     evaluation_artifact,
@@ -35,6 +42,7 @@ from src.protocol_v1 import (
     moving_block_bootstrap,
     payload_sha256,
     persist_final_candidate,
+    rank_training_candidates,
     robustness_plan,
     run_frozen_walk_forward,
     run_robustness_diagnostics,
@@ -94,6 +102,92 @@ def _metrics(candidate_id: str, *, score_bias: float = 0.0, trades: int = 30) ->
         "annualized_cost_drag_fraction": 0.01,
         "annualized_turnover_multiple": 2.0,
         "sortino": 1.0,
+    }
+
+
+def _ranked_rows(protocol: dict, start: str, end: str) -> list[dict]:
+    rows = []
+    for position, candidate in enumerate(generate_candidates(protocol)):
+        row = _metrics(
+            candidate["candidate_id"],
+            score_bias=0.02 if position == 0 else -position / 10_000.0,
+        )
+        row.update(
+            {
+                "scope": "training",
+                "start_inclusive": pd.Timestamp(start).isoformat(),
+                "end_exclusive": pd.Timestamp(end).isoformat(),
+                "context_start_inclusive": (
+                    pd.Timestamp(start) - pd.Timedelta(weeks=1)
+                ).isoformat(),
+                "context_row_count": 168,
+            }
+        )
+        rows.append(row)
+    return rank_training_candidates(rows, minimum_trades=30)
+
+
+def _zero_evaluation_artifact(
+    candidate: dict,
+    start: str,
+    end: str,
+    *,
+    excluded_weeks: list[str] | None = None,
+) -> dict:
+    start_ts = pd.Timestamp(start)
+    end_ts = pd.Timestamp(end)
+    excluded = {pd.Timestamp(value) for value in (excluded_weeks or [])}
+    week_starts = [
+        value
+        for value in pd.date_range(start_ts, end_ts - pd.Timedelta(weeks=1), freq="7D")
+        if value not in excluded
+    ]
+    configuration = dict(candidate["config"])
+    return {
+        "candidate": {
+            "candidate_id": candidate["candidate_id"],
+            "target_plan_id": candidate.get("target_plan_id"),
+            "configuration": configuration,
+        },
+        "metrics": {
+            "candidate_id": candidate["candidate_id"],
+            "start_inclusive": start_ts.isoformat(),
+            "end_exclusive": end_ts.isoformat(),
+            "context_start_inclusive": (start_ts - pd.Timedelta(weeks=1)).isoformat(),
+            "context_row_count": 168,
+            "evaluation_row_count": 1,
+            "num_trades": 0,
+            "total_return": 0.0,
+            "max_drawdown": 0.0,
+            "fees": 0.0,
+            "entry_slippage_cost": 0.0,
+            "exit_slippage_cost": 0.0,
+            "total_slippage_cost": 0.0,
+            "combined_execution_cost": 0.0,
+            "total_traded_notional": 0.0,
+            "maximum_leverage_used": 0.0,
+        },
+        "accounting": {
+            "initial_capital": 10_000.0,
+            "row_count": 1,
+            "first_timestamp": start_ts.isoformat(),
+            "last_timestamp": (end_ts - pd.Timedelta(hours=1)).isoformat(),
+            "first_equity": 10_000.0,
+            "final_equity": 10_000.0,
+            "final_cash": 10_000.0,
+            "final_unrealized_pnl": 0.0,
+            "final_open_qty": 0.0,
+            "total_fees": 0.0,
+            "total_slippage_cost": 0.0,
+            "combined_execution_cost": 0.0,
+            "total_turnover_notional": 0.0,
+            "maximum_leverage_used": 0.0,
+        },
+        "weekly_returns": [
+            {"week_start_utc": value.isoformat(), "net_return": 0.0}
+            for value in week_starts
+        ],
+        "trades": [],
     }
 
 
@@ -278,6 +372,7 @@ class ArtifactAndHoldoutTests(unittest.TestCase):
                 run_id="synthetic-run",
                 root=tmp,
                 test_suite_record="synthetic 1/1 passed",
+                test_suite_verified=True,
             )
             self.assertTrue((bundle.root / "charts").is_dir())
             self.assertEqual(bundle.verify_json("candidate_grid.json")["candidate_count"], 18)
@@ -307,40 +402,215 @@ class ArtifactAndHoldoutTests(unittest.TestCase):
             )
             self.assertEqual(artifact["artifact_hash"], payload_sha256({k: v for k, v in artifact.items() if k != "artifact_hash"}))
 
+    def test_canonical_initialization_rejects_unverified_test_text(self) -> None:
+        with self.assertRaises(ProtocolError):
+            initialize_experiment_bundle(
+                _protocol(),
+                run_id="must-fail-before-io",
+                root="unused",
+                test_suite_record="claimed passed",
+                test_suite_verified=False,
+            )
+
     def _ready_bundle(self, root: pathlib.Path, protocol: dict) -> ExperimentBundle:
         bundle = ExperimentBundle.create(root)
         bundle.seal_json("protocol.json", {"protocol_sha256": EXPECTED_PROTOCOL_SHA256, "protocol": protocol})
-        bundle.seal_json("dataset_manifest.json", {"sha256": protocol["dataset"]["sha256"]})
-        bundle.seal_json("code_provenance.json", {"git_commit": "abc", "test_suite_record": "synthetic passed"})
-        candidate = generate_candidates(protocol)[0]
-        final_metrics = _metrics(candidate["candidate_id"])
-        for fold_id in (1, 2, 3):
+        missing_timestamps = [
+            "2021-08-13T02:00:00+00:00",
+            "2021-08-13T03:00:00+00:00",
+            "2021-08-13T04:00:00+00:00",
+            "2021-08-13T05:00:00+00:00",
+            "2021-09-29T07:00:00+00:00",
+            "2021-09-29T08:00:00+00:00",
+            "2023-03-24T13:00:00+00:00",
+        ]
+        bundle.seal_json(
+            "dataset_manifest.json",
+            {
+                "sha256": protocol["dataset"]["sha256"],
+                "missing_timestamps": missing_timestamps,
+            },
+        )
+        bundle.seal_json(
+            "code_provenance.json",
+            {
+                "git_commit": "abc",
+                "test_suite_record": "synthetic passed",
+                "test_suite_verified": True,
+                "canonical_execution_allowed": True,
+            },
+        )
+        grid = generate_candidates(protocol)
+        bundle.seal_json("candidate_grid.json", {"candidate_count": 18, "candidates": grid})
+        candidate = grid[0]
+        dev = protocol["partitions"]["development"]
+        development_rows = _ranked_rows(
+            protocol, dev["start_inclusive"], dev["end_exclusive"]
+        )
+        bundle.seal_json(
+            "development/candidate_ranking.json",
+            {
+                "candidate_count": 18,
+                "candidate_ranking": development_rows,
+            },
+        )
+        bundle.seal_json("development/baseline.json", {"synthetic": True})
+        fold_ids = []
+        for fold in protocol["walk_forward"]["folds"]:
+            fold_id = int(fold["id"])
+            scores = _ranked_rows(
+                protocol,
+                fold["train_start_inclusive"],
+                fold["train_end_exclusive"],
+            )
+            selected_id = scores[0]["candidate_id"]
+            fold_ids.append(selected_id)
             bundle.seal_json(
                 f"fold_{fold_id}/selection.json",
-                {"fold_id": fold_id, "selected_candidate_id": candidate["candidate_id"]},
+                {
+                    "fold_id": fold_id,
+                    "training_scores": scores,
+                    "selected_candidate_id": selected_id,
+                },
             )
             bundle.seal_json(
                 f"fold_{fold_id}/validation.json",
-                {"fold_id": fold_id, "result": {"candidate_id": candidate["candidate_id"]}},
+                {
+                    "fold_id": fold_id,
+                    "result": {"metrics": {"candidate_id": selected_id}},
+                },
             )
+        validation = protocol["partitions"]["validation"]
+        week_starts = pd.date_range(
+            validation["start_inclusive"],
+            pd.Timestamp(validation["end_exclusive"]) - pd.Timedelta(weeks=1),
+            freq="7D",
+        )
+        aggregate_artifact = {
+            "metrics": {"complete_weeks": 72},
+            "weekly_returns": [
+                {"week_start_utc": ts.isoformat(), "net_return": 0.0}
+                for ts in week_starts
+            ],
+            "trades": [],
+            "folds": [
+                {"fold_id": i + 1, "selected_candidate_id": selected_id}
+                for i, selected_id in enumerate(fold_ids)
+            ],
+        }
+        bundle.seal_json("walk_forward_aggregate.json", aggregate_artifact)
         bundle.seal_json(
-            "final_fit/training_scores.json", {"training_scores": [final_metrics]}
+            "walk_forward_audit.json", {"status": "passed", "holdout_accessed": False}
+        )
+        holdout_start = protocol["partitions"]["holdout"]["start_inclusive"]
+        final_rows = _ranked_rows(protocol, dev["start_inclusive"], holdout_start)
+        bundle.seal_json(
+            "final_fit/training_scores.json", {"training_scores": final_rows}
+        )
+        final_candidate = persist_final_candidate(
+            protocol,
+            evaluations=final_rows,
+            bundle=bundle,
+            code_commit="abc",
+            timestamp_utc="2026-09-05T00:00:00+00:00",
+        )
+        gap_weeks = [
+            "2021-08-09T00:00:00+00:00",
+            "2021-09-27T00:00:00+00:00",
+            "2023-03-20T00:00:00+00:00",
+        ]
+        selected = next(row for row in grid if row["candidate_id"] == final_candidate["candidate_id"])
+        robustness_outputs = []
+        pre_start = dev["start_inclusive"]
+        pre_end = holdout_start
+        for scenario in robustness_plan(protocol, selected):
+            scenario_id = scenario["id"]
+            if scenario_id == "calendar_year_subperiods":
+                result = {
+                    "subperiods": [
+                        {"year": year}
+                        for year in range(pd.Timestamp(pre_start).year, pd.Timestamp(pre_end).year + 1)
+                    ],
+                    "construction": "calendar_slices_of_continuous_preholdout_marked_equity",
+                }
+            elif scenario_id == "non_overlapping_24_week_subperiods":
+                cursor = pd.Timestamp(pre_start)
+                subperiods = []
+                while cursor + pd.Timedelta(weeks=24) <= pd.Timestamp(pre_end):
+                    period_end = cursor + pd.Timedelta(weeks=24)
+                    subperiods.append(
+                        {
+                            "period": len(subperiods) + 1,
+                            "start_inclusive": cursor.isoformat(),
+                            "end_exclusive": period_end.isoformat(),
+                            "complete_weeks": 24,
+                        }
+                    )
+                    cursor = period_end
+                result = {
+                    "subperiods": subperiods,
+                    "remainder_weeks": int(
+                        (pd.Timestamp(pre_end) - cursor) / pd.Timedelta(weeks=1)
+                    ),
+                    "construction": "non_overlapping_slices_of_continuous_preholdout_marked_equity",
+                }
+            elif scenario_id == "parameter_neighborhood":
+                result = {
+                    "candidate_diagnostics": [
+                        {
+                            **_metrics(candidate_row["candidate_id"]),
+                            "start_inclusive": pd.Timestamp(pre_start).isoformat(),
+                            "end_exclusive": pd.Timestamp(pre_end).isoformat(),
+                            "context_start_inclusive": (
+                                pd.Timestamp(pre_start) - pd.Timedelta(weeks=1)
+                            ).isoformat(),
+                            "context_row_count": 168,
+                        }
+                        for candidate_row in grid
+                    ],
+                    "selection_performed": False,
+                }
+            else:
+                varied = {"candidate_id": selected["candidate_id"], "config": dict(selected["config"])}
+                varied["config"].update(scenario.get("overrides", {}))
+                result = _zero_evaluation_artifact(
+                    varied,
+                    pre_start,
+                    pre_end,
+                    excluded_weeks=(gap_weeks if scenario_id == "exclude_canonical_gap_weeks" else None),
+                )
+                if scenario_id == "exclude_canonical_gap_weeks":
+                    result["excluded_weeks"] = gap_weeks
+            robustness_outputs.append({"scenario": scenario, "result": result})
+        robustness_artifact = {
+            "selected_candidate_id": final_candidate["candidate_id"],
+            "selection_changed": False,
+            "start_inclusive": pd.Timestamp(dev["start_inclusive"]).isoformat(),
+            "end_exclusive": pd.Timestamp(holdout_start).isoformat(),
+            "gap_weeks": gap_weeks,
+            "outputs": robustness_outputs,
+        }
+        robustness_artifact["audit"] = audit_preholdout_robustness(
+            protocol,
+            artifact=robustness_artifact,
+            final_candidate=final_candidate,
+            missing_timestamps=missing_timestamps,
+        )
+        bundle.seal_json("robustness/results.json", robustness_artifact)
+        settings = protocol["uncertainty"]
+        uncertainty_artifact = bootstrap_from_evaluation_artifact(
+            aggregate_artifact, settings=settings
+        )
+        uncertainty_artifact.update(
+            {
+                "source_stage": "aggregate_walk_forward_validation",
+                "source_artifact": "walk_forward_aggregate.json",
+                "confirmatory_null_test": False,
+            }
         )
         bundle.seal_json(
-            "final_fit/final_candidate.json",
-            {
-                "candidate_id": candidate["candidate_id"],
-                "configuration": candidate["config"],
-                "training_period": {
-                    "start_inclusive": protocol["partitions"]["development"]["start_inclusive"],
-                    "end_exclusive": protocol["partitions"]["holdout"]["start_inclusive"],
-                },
-                "protocol_hash": EXPECTED_PROTOCOL_SHA256,
-                "dataset_hash": protocol["dataset"]["sha256"],
-                "code_commit": "abc",
-                "objective_value": selection_score(final_metrics),
-            },
-            embed_hash=True,
+            "uncertainty/weekly_bootstrap.json",
+            uncertainty_artifact,
         )
         return bundle
 
@@ -362,11 +632,185 @@ class ArtifactAndHoldoutTests(unittest.TestCase):
     def test_holdout_authorization_marker_is_one_time_and_hashable(self) -> None:
         protocol = _protocol()
         with tempfile.TemporaryDirectory() as tmp:
-            bundle = self._ready_bundle(pathlib.Path(tmp) / "bundle", protocol)
-            marker = authorize_holdout(protocol, bundle=bundle, confirm_holdout=True)
+            root = pathlib.Path(tmp)
+            bundle = self._ready_bundle(root / "run-one", protocol)
+            global_marker = root / "HOLDOUT_ACCESS.json"
+            marker = authorize_holdout(
+                protocol,
+                bundle=bundle,
+                confirm_holdout=True,
+                global_access_path=global_marker,
+            )
             self.assertEqual(marker["protocol_hash"], EXPECTED_PROTOCOL_SHA256)
-            with self.assertRaises(ArtifactSealedError):
-                authorize_holdout(protocol, bundle=bundle, confirm_holdout=True)
+            self.assertTrue(global_marker.exists())
+            with self.assertRaises(HoldoutLockedError):
+                authorize_holdout(
+                    protocol,
+                    bundle=bundle,
+                    confirm_holdout=True,
+                    global_access_path=global_marker,
+                )
+
+    def test_global_holdout_marker_blocks_a_second_run_id(self) -> None:
+        protocol = _protocol()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            first = self._ready_bundle(root / "run-one", protocol)
+            second = self._ready_bundle(root / "run-two", protocol)
+            global_marker = root / "HOLDOUT_ACCESS.json"
+            authorize_holdout(
+                protocol,
+                bundle=first,
+                confirm_holdout=True,
+                global_access_path=global_marker,
+            )
+            with self.assertRaises(HoldoutLockedError):
+                authorize_holdout(
+                    protocol,
+                    bundle=second,
+                    confirm_holdout=True,
+                    global_access_path=global_marker,
+                )
+            self.assertFalse((second.root / "holdout/ACCESS.json").exists())
+
+    def test_incomplete_final_grid_cannot_unlock_holdout(self) -> None:
+        protocol = _protocol()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._ready_bundle(pathlib.Path(tmp) / "bundle", protocol)
+            scores_path = bundle.root / "final_fit/training_scores.json"
+            sidecar = scores_path.with_suffix(".json.sha256")
+            scores_path.unlink()
+            sidecar.unlink()
+            bundle.seal_json(
+                "final_fit/training_scores.json",
+                {"training_scores": _ranked_rows(
+                    protocol,
+                    protocol["partitions"]["development"]["start_inclusive"],
+                    protocol["partitions"]["holdout"]["start_inclusive"],
+                )[:-1]},
+            )
+            with self.assertRaises(HoldoutLockedError):
+                assert_holdout_ready(protocol, bundle=bundle, confirm_holdout=True)
+
+    def test_empty_robustness_result_cannot_unlock_holdout(self) -> None:
+        protocol = _protocol()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._ready_bundle(pathlib.Path(tmp) / "bundle", protocol)
+            path = bundle.root / "robustness/results.json"
+            sidecar = path.with_suffix(".json.sha256")
+            payload = bundle.verify_json("robustness/results.json")
+            payload.pop("artifact_hash", None)
+            payload["outputs"][0]["result"] = {}
+            path.unlink()
+            sidecar.unlink()
+            bundle.seal_json("robustness/results.json", payload)
+            with self.assertRaises(ProtocolError):
+                assert_holdout_ready(protocol, bundle=bundle, confirm_holdout=True)
+
+    def test_incomplete_uncertainty_result_cannot_unlock_holdout(self) -> None:
+        protocol = _protocol()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._ready_bundle(pathlib.Path(tmp) / "bundle", protocol)
+            path = bundle.root / "uncertainty/weekly_bootstrap.json"
+            sidecar = path.with_suffix(".json.sha256")
+            payload = bundle.verify_json("uncertainty/weekly_bootstrap.json")
+            payload.pop("artifact_hash", None)
+            payload["statistics"]["mean_weekly_net_return"].pop("percentile_2_5")
+            path.unlink()
+            sidecar.unlink()
+            bundle.seal_json("uncertainty/weekly_bootstrap.json", payload)
+            with self.assertRaises(HoldoutLockedError):
+                assert_holdout_ready(protocol, bundle=bundle, confirm_holdout=True)
+
+    def test_production_holdout_rejects_noncanonical_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = ExperimentBundle.create(pathlib.Path(tmp) / "custom-run")
+            executor = ProtocolExecutor(protocol=_protocol(), bundle=bundle)
+            with patch.object(ProtocolExecutor, "_verify_identity", return_value=None):
+                with self.assertRaises(HoldoutLockedError):
+                    executor.holdout(confirm_holdout=True)
+
+    def test_evaluation_artifact_audit_reconciles_equity_weeks_and_costs(self) -> None:
+        protocol = _protocol()
+        start = "2021-05-31T00:00:00Z"
+        end = "2021-06-07T00:00:00Z"
+        result = evaluate_candidate_window(
+            _hourly("2021-05-24T00:00:00Z", end),
+            candidate=generate_candidates(protocol)[0],
+            start_inclusive=start,
+            end_exclusive=end,
+        )
+        artifact = evaluation_artifact(result)
+        checks = audit_evaluation_artifact(
+            artifact,
+            start_inclusive=start,
+            end_exclusive=end,
+            max_leverage=1.0,
+        )
+        self.assertIn("equity_curve_reconciled", checks)
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = ExperimentBundle.create(pathlib.Path(tmp) / "bundle")
+            bundle.seal_json("development/baseline.json", artifact, embed_hash=True)
+            self.assertEqual(
+                bundle.verify_json("development/baseline.json")["metrics"]["candidate_id"],
+                result["metrics"]["candidate_id"],
+            )
+        broken = copy.deepcopy(artifact)
+        broken["accounting"]["final_cash"] += 1.0
+        with self.assertRaises(ProtocolError):
+            audit_evaluation_artifact(
+                broken,
+                start_inclusive=start,
+                end_exclusive=end,
+                max_leverage=1.0,
+            )
+
+    def test_holdout_container_audits_both_frozen_configurations(self) -> None:
+        protocol = _protocol()
+        start = protocol["partitions"]["holdout"]["start_inclusive"]
+        end = protocol["partitions"]["holdout"]["end_exclusive"]
+        context_start = (
+            pd.Timestamp(start) - pd.Timedelta(weeks=1)
+        ).isoformat()
+        frame = _hourly(context_start, end)
+        selected = generate_candidates(protocol)[0]
+        baseline = {
+            "candidate_id": "fixed_baseline",
+            "target_plan_id": "midpoint_half_then_opposite",
+            "config": dict(protocol["baseline"]),
+        }
+        final_candidate = {
+            "candidate_id": selected["candidate_id"],
+            "configuration": selected["config"],
+        }
+        artifact = {
+            "stage": "holdout",
+            "allowed_configurations": [
+                "fixed_baseline",
+                "single_final_selected_candidate",
+            ],
+            "baseline": evaluation_artifact(
+                evaluate_candidate_window(
+                    frame,
+                    candidate=baseline,
+                    start_inclusive=start,
+                    end_exclusive=end,
+                )
+            ),
+            "selected": evaluation_artifact(
+                evaluate_candidate_window(
+                    frame,
+                    candidate=selected,
+                    start_inclusive=start,
+                    end_exclusive=end,
+                )
+            ),
+        }
+        audit = audit_holdout_results(
+            protocol, artifact=artifact, final_candidate=final_candidate
+        )
+        self.assertEqual(audit["status"], "passed")
+        self.assertEqual(len(artifact["selected"]["weekly_returns"]), 52)
 
 
 class CostUncertaintyAndRobustnessTests(unittest.TestCase):
@@ -424,11 +868,51 @@ class CostUncertaintyAndRobustnessTests(unittest.TestCase):
 
     def test_bootstrap_is_deterministic(self) -> None:
         returns = [0.01, -0.005, 0.02, 0.0, 0.015, -0.01, 0.005, 0.01]
-        first = moving_block_bootstrap(returns, replications=200, seed=123)
-        second = moving_block_bootstrap(returns, replications=200, seed=123)
+        trade_groups = [[value / 2.0] for value in returns]
+        first = moving_block_bootstrap(
+            returns,
+            weekly_trade_returns=trade_groups,
+            replications=200,
+            seed=123,
+        )
+        second = moving_block_bootstrap(
+            returns,
+            weekly_trade_returns=trade_groups,
+            replications=200,
+            seed=123,
+        )
         self.assertEqual(first, second)
         self.assertEqual(first["block_length_weeks"], 4)
         self.assertAlmostEqual(first["point_estimate"], sum(returns) / len(returns))
+        self.assertEqual(
+            set(first["statistics"]),
+            {
+                "mean_weekly_net_return",
+                "annualized_net_return",
+                "maximum_drawdown",
+                "average_trade_net_return",
+            },
+        )
+        self.assertAlmostEqual(
+            first["statistics"]["average_trade_net_return"]["point_estimate"],
+            sum(returns) / len(returns) / 2.0,
+        )
+
+    def test_bootstrap_rejects_nonfinite_or_unordered_weekly_units(self) -> None:
+        with self.assertRaises(ProtocolError):
+            moving_block_bootstrap([0.0, 0.1, math.nan, 0.2])
+        artifact = {
+            "weekly_returns": [
+                {"week_start_utc": "2024-01-08T00:00:00Z", "net_return": 0.01},
+                {"week_start_utc": "2024-01-01T00:00:00Z", "net_return": 0.02},
+                {"week_start_utc": "2024-01-15T00:00:00Z", "net_return": 0.00},
+                {"week_start_utc": "2024-01-22T00:00:00Z", "net_return": -0.01},
+            ],
+            "trades": [],
+        }
+        settings = {"block_length_weeks": 4, "replications": 10, "random_seed": 1}
+        with self.assertRaises(ProtocolError):
+            bootstrap_from_evaluation_artifact(artifact, settings=settings)
 
     def test_genuine_intraweek_gap_does_not_remove_primary_week(self) -> None:
         frame = _hourly("2021-08-09", "2021-08-16")
