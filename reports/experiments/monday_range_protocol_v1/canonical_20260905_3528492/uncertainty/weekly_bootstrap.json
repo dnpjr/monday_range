@@ -1,0 +1,43 @@
+{
+  "artifact_hash": "3e53b69f121c921bce655833471225e9a95ae54dc5ac7020bea573967c5e784c",
+  "block_length_weeks": 4,
+  "confirmatory_null_test": false,
+  "method": "moving_block_bootstrap",
+  "percentile_2_5": -0.0022787562409876997,
+  "percentile_50": -0.0012038545055723644,
+  "percentile_97_5": -2.5078923244506514e-05,
+  "point_estimate": -0.0010155095447971234,
+  "reject_null": false,
+  "replications": 10000,
+  "sample_weeks": 72,
+  "seed": 20260905,
+  "source_artifact": "walk_forward_aggregate.json",
+  "source_stage": "aggregate_walk_forward_validation",
+  "statistics": {
+    "annualized_net_return": {
+      "percentile_2_5": -0.11262442914488806,
+      "percentile_50": -0.06150113776034932,
+      "percentile_97_5": -0.002089574478475552,
+      "point_estimate": -0.05222922289547405
+    },
+    "average_trade_net_return": {
+      "percentile_2_5": -0.013510582436026625,
+      "percentile_50": -0.005199157621702561,
+      "percentile_97_5": 0.004038090432521557,
+      "point_estimate": -0.003850750100731817
+    },
+    "maximum_drawdown": {
+      "percentile_2_5": -0.1581619860417263,
+      "percentile_50": -0.0968344212389155,
+      "percentile_97_5": -0.04074445544485662,
+      "point_estimate": -0.10174788910324561
+    },
+    "mean_weekly_net_return": {
+      "percentile_2_5": -0.0022787562409876997,
+      "percentile_50": -0.0012038545055723644,
+      "percentile_97_5": -2.5078923244506514e-05,
+      "point_estimate": -0.0010155095447971234
+    }
+  },
+  "unit": "complete_utc_iso_week"
+}

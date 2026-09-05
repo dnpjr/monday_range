@@ -1,0 +1,62 @@
+{
+  "aggregate_checks": [
+    "exact_72_week_and_hourly_coverage",
+    "hourly_drawdown_reconciled",
+    "weekly_and_hourly_equity_reconciled",
+    "scaled_execution_costs_reconciled"
+  ],
+  "artifact_hash": "580994a0cf3e7530fcbd199fea3ff08b36f811c3ddf2e12ed1fd139c48c0d168",
+  "audited_at_utc": "2026-09-05T21:29:54.920869+00:00",
+  "development_checks": [
+    "configuration_identity_verified",
+    "exact_interval_and_context",
+    "terminal_accounting_consistent",
+    "equity_curve_reconciled",
+    "execution_costs_and_turnover_reconciled",
+    "trades_unique_window_bounded_capped_and_reconciled",
+    "weekly_units_unique_and_window_bounded"
+  ],
+  "folds": [
+    {
+      "checks": [
+        "configuration_identity_verified",
+        "exact_interval_and_context",
+        "terminal_accounting_consistent",
+        "equity_curve_reconciled",
+        "execution_costs_and_turnover_reconciled",
+        "trades_unique_window_bounded_capped_and_reconciled",
+        "weekly_units_unique_and_window_bounded"
+      ],
+      "fold_id": 1,
+      "selected_candidate_id": "mr1_stop100_day3_full_at_opposite_boundary"
+    },
+    {
+      "checks": [
+        "configuration_identity_verified",
+        "exact_interval_and_context",
+        "terminal_accounting_consistent",
+        "equity_curve_reconciled",
+        "execution_costs_and_turnover_reconciled",
+        "trades_unique_window_bounded_capped_and_reconciled",
+        "weekly_units_unique_and_window_bounded"
+      ],
+      "fold_id": 2,
+      "selected_candidate_id": "mr1_stop125_day2_full_at_midpoint"
+    },
+    {
+      "checks": [
+        "configuration_identity_verified",
+        "exact_interval_and_context",
+        "terminal_accounting_consistent",
+        "equity_curve_reconciled",
+        "execution_costs_and_turnover_reconciled",
+        "trades_unique_window_bounded_capped_and_reconciled",
+        "weekly_units_unique_and_window_bounded"
+      ],
+      "fold_id": 3,
+      "selected_candidate_id": "mr1_stop125_day2_full_at_midpoint"
+    }
+  ],
+  "holdout_accessed": false,
+  "status": "passed"
+}

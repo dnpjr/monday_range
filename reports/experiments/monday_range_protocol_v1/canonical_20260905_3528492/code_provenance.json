@@ -1,0 +1,16 @@
+{
+  "accounting_version": "marked_equity_v1",
+  "canonical_execution_allowed": true,
+  "gap_fill_policy": "bar_open_when_opened_through_trigger_then_apply_adverse_slippage",
+  "git_commit": "352849299200b749496d588a1d7d1149503750fc",
+  "intrabar_policy": "conservative_stop_first",
+  "mark_price": "bar_close",
+  "numpy_version": "1.24.3",
+  "pandas_version": "2.0.3",
+  "python_version": "3.11.5",
+  "recorded_at_utc": "2026-09-05T21:24:17.455135+00:00",
+  "short_position_interpretation": "synthetic_research_position_on_binance_spot_price_series",
+  "test_suite_record": "190/190 passed",
+  "test_suite_verified": true,
+  "working_tree": "clean"
+}

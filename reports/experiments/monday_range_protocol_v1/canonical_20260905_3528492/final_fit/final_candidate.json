@@ -1,0 +1,59 @@
+{
+  "artifact_hash": "37e9e7c6d0386791556f5566d257a776ec09c11f1398a17b1d70cd89754097c0",
+  "candidate_id": "mr1_stop125_day2_full_at_midpoint",
+  "code_commit": "352849299200b749496d588a1d7d1149503750fc",
+  "configuration": {
+    "accounting_version": "marked_equity_v1",
+    "breakeven_includes_fees": false,
+    "direction": "both",
+    "entry_days_utc": [
+      1,
+      2,
+      3
+    ],
+    "entry_price": "next_bar_open_after_adverse_slippage",
+    "exit_style": "single_target",
+    "fee_bps_per_fill": 10.0,
+    "friday_cutoff_hour_utc": 23,
+    "gap_fill_policy": "bar_open_when_opened_through_trigger_then_apply_adverse_slippage",
+    "initial_capital": 10000.0,
+    "intrabar_policy": "conservative_stop_first",
+    "mark_price": "bar_close",
+    "max_entry_day_utc": 2,
+    "max_entry_hour_utc": null,
+    "max_leverage": 1.0,
+    "max_range_pct": null,
+    "min_range_pct": null,
+    "move_stop_to_breakeven_after_tp1": true,
+    "one_trade_per_iso_week": true,
+    "risk_base": "current_equity",
+    "risk_fraction": 0.01,
+    "signal_bar": "completed_previous_bar",
+    "single_target_level": "tp1",
+    "single_target_mode": true,
+    "slippage_bps_per_fill": 5.0,
+    "sma_period": null,
+    "spread_model": "included_in_slippage",
+    "stop_mode": "swept_boundary_offset",
+    "stop_range_fraction": 1.25,
+    "strategy": "current_monday_range",
+    "terminal_exit": "end_of_data_with_normal_exit_costs",
+    "tp1_close_fraction": 1.0,
+    "tp1_range_fraction": 0.5,
+    "tp2_range_fraction": 1.0
+  },
+  "dataset_hash": "4d541711c323ac82e07bade75a522c0a48776c7d2e4eec7f45d8d9c4e00b41ce",
+  "objective_value": -0.0966414484039566,
+  "protocol_hash": "da0d41ce67d445bcb308012bf323d2e573d246a7a1fd3eb57c9ee6bc951d4cf3",
+  "short_position_interpretation": "synthetic_research_position_on_binance_spot_price_series",
+  "tie_break_values": {
+    "absolute_max_drawdown": 0.1094020535111229,
+    "annualized_turnover_multiple": 15.619144917580103,
+    "sortino": -0.11990732023077587
+  },
+  "timestamp_utc": "2026-09-05T21:31:44.870781+00:00",
+  "training_period": {
+    "end_exclusive": "2025-05-19T00:00:00Z",
+    "start_inclusive": "2021-05-31T00:00:00Z"
+  }
+}

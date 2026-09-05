@@ -7,7 +7,13 @@ data/binance/*.csv
 data/backtests/
 data/sweeps/
 data/walk_forward/
-reports/experiments/
+reports/experiments/*
+!reports/experiments/monday_range_protocol_v1/
+reports/experiments/monday_range_protocol_v1/*
+!reports/experiments/monday_range_protocol_v1/HOLDOUT_ACCESS.json
+!reports/experiments/monday_range_protocol_v1/HOLDOUT_ACCESS.json.sha256
+!reports/experiments/monday_range_protocol_v1/canonical_20260905_3528492/
+!reports/experiments/monday_range_protocol_v1/canonical_20260905_3528492/**
 
 # Paper-trading runtime state
 data/paper_state.json
