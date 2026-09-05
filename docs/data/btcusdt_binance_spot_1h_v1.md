@@ -70,12 +70,12 @@ Derived views are generated on demand and are not separate authoritative dataset
 
 ## Data flow and provenance
 
-- `run_backtest.py`, `run_parameter_sweep.py`, and `run_walk_forward.py` default to canonical v1.
+- `run_backtest.py` and the Protocol V1 executor load canonical v1 explicitly.
 - Higher-timeframe evaluation is derived from canonical 1h through `src.canonical_data.load_canonical_ohlcv`.
 - Diagnostics use the dataset version recorded by the originating run.
-- The dashboard Data Manager and paper cycle remain live/runtime paths. Their downloaded evaluation candles exclude nominally incomplete bars; the paper cycle also applies its existing close-time guard.
-- The dashboard's standard backtest and walk-forward actions inherit the canonical runner defaults. Its standalone Research Lab and Range Sweep exploratory pages still read selected live/legacy caches; their outputs must not be treated as canonical evaluation until those callers explicitly select a canonical dataset.
-- Historical `data/binance/*.csv`, saved backtests, sweeps, walk-forward outputs, and paper state remain legacy/runtime artifacts.
+- The public dashboard loads sealed Protocol V1 results. Its Explore page reads canonical v1 and returns one in-memory result without an artifact writer.
+- Live cache and paper-cycle utilities remain separate maintenance/runtime paths and cannot replace the frozen research dataset.
+- Historical saved runs and independently downloaded caches are legacy material and are not distributed as canonical inputs.
 
 Future run configuration records dataset version/hash, code commit, strategy configuration, accounting version, risk base, leverage, fees, slippage, intrabar policy, timeframe, requested date range, and UTC run timestamp.
 

@@ -41,4 +41,4 @@ Saved names `opposite_boundary`, `range_fraction`, and `fixed_pct` remain readab
 
 ## Legacy results
 
-Anything already under `results/`, `data/backtests/`, `data/sweeps/`, or other previously generated output directories was produced before marked equity, current-equity sizing, leverage caps, gap-aware fills, explicit intrabar policy, and terminal closure. Those artifacts remain historical records and must not be interpreted as results from the corrected methodology. Phase 1 does not overwrite or regenerate them.
+Performance files generated before marked equity, current-equity sizing, leverage caps, gap-aware fills, explicit intrabar policy, and terminal closure are not comparable with Protocol V1. The small tracked sample is preserved under `archive/legacy/pre_correction_results/`; larger ignored local runs and caches were moved outside the public repository during finalisation. None is loaded by the final dashboard.

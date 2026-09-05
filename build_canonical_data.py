@@ -78,13 +78,50 @@ def _comparison(canonical: pd.DataFrame, path: Path) -> dict[str, Any]:
     }
 
 
+def _comparison_report(
+    title: str,
+    comparison: dict[str, Any] | None,
+    interpretation: str,
+) -> str:
+    if comparison is None:
+        return (
+            f"### {title}\n\n"
+            "No legacy cache was supplied for comparison. This does not affect "
+            "canonical construction or validation.\n"
+        )
+    return f"""### {title}
+
+- Rows / coverage: `{comparison['rows']}` / `{comparison['first']}` through `{comparison['last']}`
+- Legacy file SHA-256: `{comparison['sha256']}`
+- Shared rows: `{comparison['shared_rows']}`
+- Canonical-only / legacy-only rows: `{comparison['canonical_only_rows']}` / `{comparison['legacy_only_rows']}`
+- Shared rows with different OHLCV: `{comparison['differing_shared_ohlcv_rows']}`
+
+{interpretation}
+"""
+
+
 def _report(
-    *, manifest: dict[str, Any], monday: dict[str, Any], lab: dict[str, Any],
+    *, manifest: dict[str, Any], monday: dict[str, Any] | None,
+    lab: dict[str, Any] | None,
     derived: dict[str, Any], report_path: Path,
 ) -> None:
     gaps = "\n".join(
         f"- `{', '.join(item['timestamps'])}`: {item['authoritative_result']} "
         f"{item['event']} {item['decision']}" for item in GAP_INVESTIGATION
+    )
+    monday_report = _comparison_report(
+        "Monday 1h cache",
+        monday,
+        "The one differing row is `2026-05-20 14:00 UTC`. The Monday cache "
+        "captured it while forming; canonical v1 uses Binance's settled candle. "
+        "The old file is a legacy cache and was not used as the authoritative input.",
+    )
+    lab_report = _comparison_report(
+        "Crypto research lab 1h cache",
+        lab,
+        "The lab starts 24 hours later and ends 24 hours later. Its overlap agrees "
+        "with canonical v1. The lab repository was read only throughout this work.",
     )
     text = f"""# BTCUSDT Binance spot 1h canonical dataset v1
 
@@ -123,25 +160,8 @@ The gaps are venue-history facts in the canonical data. They remain explicit.
 
 ## Differences from legacy caches
 
-### Monday 1h cache
-
-- Rows / coverage: `{monday['rows']}` / `{monday['first']}` through `{monday['last']}`
-- Legacy file SHA-256: `{monday['sha256']}`
-- Shared rows: `{monday['shared_rows']}`
-- Canonical-only / legacy-only rows: `{monday['canonical_only_rows']}` / `{monday['legacy_only_rows']}`
-- Shared rows with different OHLCV: `{monday['differing_shared_ohlcv_rows']}`
-
-The one differing row is `2026-05-20 14:00 UTC`. The Monday cache captured it while forming; canonical v1 uses Binance's settled candle. The old file remains a legacy cache and was not overwritten.
-
-### Crypto research lab 1h cache
-
-- Rows / coverage: `{lab['rows']}` / `{lab['first']}` through `{lab['last']}`
-- Legacy file SHA-256: `{lab['sha256']}`
-- Shared rows: `{lab['shared_rows']}`
-- Canonical-only / legacy-only rows: `{lab['canonical_only_rows']}` / `{lab['legacy_only_rows']}`
-- Shared rows with different OHLCV: `{lab['differing_shared_ohlcv_rows']}`
-
-The lab starts 24 hours later and ends 24 hours later. Its overlap agrees with canonical v1. The lab repository was read only throughout this work.
+{monday_report}
+{lab_report}
 
 The separately downloaded Monday 4h file (SHA-256 `f7f09ff6b7acf69d1a2d2b7d1a667f7a256b81f819285c4a726b3d2c6ad00149`) and lab 1d file (SHA-256 `14775dac3c52ba4025583ff8b45135fcb68d762ecf24372ff7d4f4e566723592`) are legacy caches. Their final saved periods were incomplete. They are superseded for reproducible evaluation by deterministic views derived from canonical 1h data, but have not been deleted.
 
@@ -156,12 +176,12 @@ Derived views are generated on demand and are not separate authoritative dataset
 
 ## Data flow and provenance
 
-- `run_backtest.py`, `run_parameter_sweep.py`, and `run_walk_forward.py` default to canonical v1.
+- `run_backtest.py` and the Protocol V1 executor load canonical v1 explicitly.
 - Higher-timeframe evaluation is derived from canonical 1h through `src.canonical_data.load_canonical_ohlcv`.
 - Diagnostics use the dataset version recorded by the originating run.
-- The dashboard Data Manager and paper cycle remain live/runtime paths. Their downloaded evaluation candles exclude nominally incomplete bars; the paper cycle also applies its existing close-time guard.
-- The dashboard's standard backtest and walk-forward actions inherit the canonical runner defaults. Its standalone Research Lab and Range Sweep exploratory pages still read selected live/legacy caches; their outputs must not be treated as canonical evaluation until those callers explicitly select a canonical dataset.
-- Historical `data/binance/*.csv`, saved backtests, sweeps, walk-forward outputs, and paper state remain legacy/runtime artifacts.
+- The public dashboard loads sealed Protocol V1 results. Its Explore page reads canonical v1 and returns one in-memory result without an artifact writer.
+- Live cache and paper-cycle utilities remain separate maintenance/runtime paths and cannot replace the frozen research dataset.
+- Historical saved runs and independently downloaded caches are legacy material and are not distributed as canonical inputs.
 
 Future run configuration records dataset version/hash, code commit, strategy configuration, accounting version, risk base, leverage, fees, slippage, intrabar policy, timeframe, requested date range, and UTC run timestamp.
 
@@ -177,8 +197,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build immutable BTCUSDT Binance spot canonical dataset v1.")
     parser.add_argument("--source-csv", default=None, help="Verified raw API response; omit to download the frozen window.")
     parser.add_argument("--retrieval-timestamp", default=None)
-    parser.add_argument("--monday-cache", default="data/binance/BTCUSDT_1h.csv")
-    parser.add_argument("--lab-cache", required=True, help="Read-only lab BTCUSDT 1h cache used only for comparison.")
+    parser.add_argument("--monday-cache", help="Optional legacy Monday 1h cache used only for comparison.")
+    parser.add_argument("--lab-cache", help="Optional read-only lab BTCUSDT 1h cache used only for comparison.")
     parser.add_argument("--report", default="docs/data/btcusdt_binance_spot_1h_v1.md")
     args = parser.parse_args()
 
@@ -211,9 +231,15 @@ def main() -> None:
         gap_investigation=GAP_INVESTIGATION,
     )
     manifest["derived_views"] = derived
-    monday = _comparison(canonical, Path(args.monday_cache))
-    lab = _comparison(canonical, Path(args.lab_cache))
-    manifest["legacy_comparisons"] = {"monday_1h": monday, "lab_1h": lab}
+    monday = _comparison(canonical, Path(args.monday_cache)) if args.monday_cache else None
+    lab = _comparison(canonical, Path(args.lab_cache)) if args.lab_cache else None
+    comparisons = {
+        name: result
+        for name, result in (("monday_1h", monday), ("lab_1h", lab))
+        if result is not None
+    }
+    if comparisons:
+        manifest["legacy_comparisons"] = comparisons
     write_manifest(manifest)
     _report(
         manifest=manifest, monday=monday, lab=lab, derived=derived,
