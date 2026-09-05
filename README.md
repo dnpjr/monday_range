@@ -1,320 +1,179 @@
-# Monday Range (Sweep-and-Fade) — Research + Backtest Framework
+# Monday Range — BTC Quantitative Research
 
-A structured mini-project for researching and backtesting a widely discussed weekly liquidity pattern commonly referred to as the **Monday Range sweep-and-fade** idea.
+A reproducible study of whether BTC exhibits short-horizon mean reversion after sweeping the completed Monday trading range.
 
-The repo is organised into two layers:
+[![Tests](https://github.com/dnpjr/monday_range/actions/workflows/ci.yml/badge.svg)](https://github.com/dnpjr/monday_range/actions/workflows/ci.yml)
+![Python 3.11](https://img.shields.io/badge/Python-3.11-3676D8)
+![Research status](https://img.shields.io/badge/Protocol%20V1-final-B7791F)
 
-1. **Research module**: empirically studies what tends to happen *after* Monday range sweeps (hit rates, conditional outcomes, distributions).
-2. **Backtest module**: implements a **risk-managed**, parameterised strategy informed by the research.
+> **Final finding:** The selected strategy returned **+1.52%** on the untouched 52-week holdout with a **−2.02%** maximum drawdown. Its 95% four-week moving-block bootstrap interval for mean weekly return was **−0.0563% to +0.0916%**. The interval includes zero, and the return became slightly negative at 1.5× costs. **Protocol V1 does not establish a reliable positive edge.**
 
-The emphasis is on:
-- clear signal definitions (avoid “hand-wavy” rules),
-- reproducible experiments (same inputs → same outputs),
-- risk-first position sizing,
-- transparent reporting (trade logs + metrics + plots).
+![Monday Range Research dashboard](docs/assets/dashboard-overview.png)
 
-> **Note:** This project is for educational/research purposes only and is not trading advice.
+## Research question
 
-> **Methodology status:** The canonical runner now uses marked bar-close equity, current-equity risk sizing, a 1× gross-notional cap, gap-aware fills, conservative stop-first OHLC handling, and end-of-data closure. See [Backtest methodology](docs/METHODOLOGY.md). Existing files under `results/`, `data/backtests/`, and `data/sweeps/` are legacy artifacts from the pre-correction engine and are not comparable with new runs.
+Does BTC tend to mean-revert after it trades beyond the completed UTC Monday range and an hourly candle closes back inside?
 
-> **Canonical data:** Reproducible BTCUSDT research defaults to the immutable Binance spot 1h dataset `btcusdt_binance_spot_1h_v1`. Its file hash, coverage, seven genuine exchange gaps, strict 4h/1d derivation policy, and legacy-cache comparison are recorded in [the versioned data-quality report](docs/data/btcusdt_binance_spot_1h_v1.md). Files under `data/binance/` remain live/legacy caches and are not canonical research inputs.
+The hypothesis, data partitions, 18-candidate grid, selection objective, transaction costs, robustness checks, bootstrap, and holdout rule were frozen before corrected canonical performance was viewed. The holdout was opened once. No parameter or methodology changed afterward.
 
----
+## Strategy
 
-## Concept
-
-### Define the Monday Range
-
-For each week:
-
-- **Monday High**: \(H_M\)  
-- **Monday Low**: \(L_M\)  
-- **Range size**: \(R = H_M - L_M\)  
-- **Midpoint**: \(M = (H_M + L_M) / 2\)
-
-This creates a weekly reference “box” used as a liquidity boundary.
-
-### Sweep-and-Fade Signal
-
-From **Tuesday onward**, look for a *sweep* beyond the Monday range followed by rejection back inside:
-
-**Long setup (sweep below)**
-- A candle trades **below** \(L_M\)
-- Then closes **back above** \(L_M\)
-- → enter **long** on the next bar open
-
-**Short setup (sweep above)**
-- A candle trades **above** \(H_M\)
-- Then closes **back below** \(H_M\)
-- → enter **short** on the next bar open
-
-Interpretation: price runs external liquidity (stops), then mean-reverts back into the range.
-
----
-
-## Repository Structure
-
-Typical structure:
-
-```
-.
-├── research_monday_range.py        # empirical analysis of sweep outcomes
-├── backtest_monday_range.py        # strategy backtest informed by research
-├── src/                            # reusable utilities (data, signals, sizing, metrics)
-├── results/
-│   ├── research/                   # research CSV/JSON outputs
-│   ├── backtests/                  # trade logs + metrics JSON
-│   └── plots/                      # equity curves + diagnostic plots
-├── requirements.txt
-└── README.md
+```mermaid
+flowchart LR
+    A[Monday builds\nhigh / low range] --> B[Tue–Wed price\nsweeps a boundary]
+    B --> C[Completed 1h candle\ncloses back inside]
+    C --> D[Fade at next\nhourly open]
+    D --> E[1.25R stop beyond\nswept boundary]
+    E --> F[Full exit at midpoint\nor Friday 23:00 UTC]
 ```
 
-(Exact filenames may differ slightly depending on the version it is using.)
+The final selected candidate is `mr1_stop125_day2_full_at_midpoint`:
 
----
+- long plus explicitly labelled synthetic short positions;
+- 1% risk from current marked equity;
+- 1.0× maximum gross notional leverage;
+- 10 bps fee and 5 bps adverse slippage on every fill;
+- gap-aware fills and conservative stop-first OHLC handling;
+- hourly bar-close mark-to-market accounting;
+- at most one position-producing signal per ISO week.
 
-## Research Module
+Shorts are research positions evaluated on a **Binance spot price series**. They do not model spot borrowing, financing, or venue-specific short execution.
 
-### What it measures
+## Research design
 
-`research_monday_range.py` is meant to answer questions like:
+```mermaid
+flowchart LR
+    C[Context only\n1 week] --> D[Development\n135 weeks\nin sample]
+    D --> W[Walk-forward\n3 × 24 weeks\nout of sample]
+    W --> S[Mechanical final\nselection and sealing]
+    S --> H[Untouched holdout\n52 weeks\nopened once]
+```
 
-- How often does a **Monday sweep** occur?
-- Conditional probabilities of reaching:
-  - **midpoint** \(M\),
-  - the **opposite boundary** (full reversal),
-  - or failing and continuing the breakout.
-- Distributions of:
-  - **maximum adverse excursion (MAE)**,
-  - **maximum favourable excursion (MFE)**,
-  - time-to-target (how many bars until TP is hit).
-- Outcomes measured in **units of Monday range** (e.g. 0.5R, 1.0R).
+| Stage | Dates, UTC `[start, end)` | Purpose | Net return |
+|---|---|---|---:|
+| Development | 2021-05-31 → 2024-01-01 | Candidate selection | +6.12% for the development winner |
+| Walk-forward | 2024-01-01 → 2025-05-19 | Three unseen 24-week folds | **−7.16% aggregate** |
+| Final pre-holdout fit | 2021-05-31 → 2025-05-19 | Select one sealed candidate | **−4.18%** |
+| Final holdout | 2025-05-19 → 2026-05-18 | One-time confirmatory test | **+1.52%** |
 
-The key goal is to quantify:
-> “If a sweep happens, what is the empirical chance of mean reversion to M / opposite side?”
+Development and final-fit figures are in sample. The walk-forward and holdout curves remain separate throughout the app and report.
 
-### Multi-symbol support
+## Untouched holdout
 
-The research module supports multiple instruments, e.g.:
+| Metric | Result |
+|---|---:|
+| Net total return | **+1.5248%** |
+| CAGR | +1.5292% |
+| Mean weekly net return | +0.02963% |
+| Maximum drawdown | −2.0218% |
+| Sharpe / Sortino | 0.495 / 0.194 |
+| Profit factor | 1.303 |
+| Trades / win rate | 43 / 74.42% |
+| Combined execution costs | 314.49 quote units |
+| Net profit | 152.48 quote units |
+| Bootstrap 95% interval | **−0.05634% to +0.09157% per week** |
+| Preregistered decision | **Null not rejected** |
 
-- `BTC-USD`
-- `^GSPC` (S&P 500)
-- `^DJI` (Dow Jones)
-- `^IXIC` (Nasdaq)
-- `EURUSD=X` (FX via Yahoo tickers)
-- any other Yahoo Finance symbol with sufficient history
+The frozen baseline returned −0.6203% over the same holdout. That comparison does not override the preregistered bootstrap decision.
 
-**Tip:** when adding more indices, keep the intervals consistent (e.g. `1h` or `4h`) to compare like-for-like.
+## Robustness
 
-### Example usage
+| Frozen holdout diagnostic | Net return |
+|---|---:|
+| Canonical costs | +1.5248% |
+| 1.5× costs | **−0.0580%** |
+| 2× costs | **−1.5955%** |
+| Target-first intrabar policy | +1.5248% |
+
+Both long and synthetic-short contributions were positive in the holdout. Earlier walk-forward performance was negative in all three folds, pre-holdout calendar slices turned negative from 2023 onward, and every candidate in the frozen grid had a negative full pre-holdout return. The result is best read as a modest positive estimate surrounded by substantial uncertainty and cost sensitivity.
+
+## Data and provenance
+
+The canonical input is [`data/canonical/btcusdt_binance_spot_1h_v1.csv`](data/canonical/btcusdt_binance_spot_1h_v1.csv):
+
+- BTCUSDT, Binance spot, 1-hour, UTC;
+- 43,793 completed, sorted, unique, validated candles;
+- 2021-05-21 15:00 UTC through 2026-05-20 14:00 UTC;
+- no interpolation or forward filling;
+- seven authoritative Binance gaps retained explicitly;
+- SHA-256 `4d541711c323ac82e07bade75a522c0a48776c7d2e4eec7f45d8d9c4e00b41ce`.
+
+Protocol SHA-256: `da0d41ce67d445bcb308012bf323d2e573d246a7a1fd3eb57c9ee6bc951d4cf3`
+
+Canonical run: `canonical_20260905_3528492`
+Research code commit: `352849299200b749496d588a1d7d1149503750fc`
+
+The public app verifies the semantic SHA-256 sidecar for every sealed JSON artifact before displaying results.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Canonical Binance 1h CSV\n+ manifest/hash] --> B[Monday Range features]
+    B --> C[Canonical backtest engine\nfills + marked portfolio]
+    C --> D[Protocol V1 executor\npartitions + selection + audit]
+    D --> E[Sealed experiment bundle\nJSON + SHA-256 sidecars]
+    E --> F[Read-only portfolio backend]
+    F --> G[Streamlit research app]
+    A --> H[In-memory Explore backtest]
+    H --> G
+```
+
+The maintained path has one canonical dataset loader, strategy engine, metric implementation, protocol executor, and read-only presentation backend. The donor `crypto_research_lab copy` contributed no code: its regime work would introduce a separate, unsealed research question and a weaker duplicate resampling path.
+
+## Run the dashboard
 
 ```bash
-python research_monday_range.py --symbol BTC-USD --interval 4h --period 2y
-python research_monday_range.py --symbol ^GSPC   --interval 1h --period 5y
-```
-
-Outputs are saved under `results/` (CSV + summary JSON).
-
----
-
-## Backtest Module
-
-`backtest_monday_range.py` implements a basic event-driven backtest loop with:
-
-- signal generation (sweep-and-fade),
-- entries/exits,
-- position sizing via **risk per trade**,
-- trade logging and performance reporting.
-
-### Initial capital
-
-The backtest starts with a configurable initial equity, e.g.:
-
-- `initial_capital = 100_000`
-
-### Risk per trade (position sizing)
-
-Rather than “buy 1 unit”, the strategy sizes positions based on a fixed fraction of equity:
-
-- `risk_fraction = 0.01`  (1% of equity per trade)
-
-Then:
-
-- **risk amount** = `equity * risk_fraction`
-- **stop distance** = (entry price − stop loss) in price units
-- **position size** = `risk_amount / stop_distance`
-
-This is the standard **risk parity per trade** idea used in systematic strategies.
-
-### Stops and targets
-
-Stops/targets are typically expressed relative to the Monday range:
-
-- Stop loss beyond sweep extreme (optionally with a multiplier)
-- Take-profit levels tied to:
-  - TP1: midpoint \(M\)
-  - TP2: opposite boundary (full reversal)
-
-### Layering (partial exits)
-
-The strategy supports **layering**, i.e. partial exits:
-
-- At **TP1**, close a fraction of the position:
-  - `tp1_fraction = 0.5` means take 50% off at midpoint
-- The remainder runs toward **TP2**
-
-Why this is useful:
-- reduces variance,
-- locks in partial profits,
-- keeps upside if the full reversal happens.
-
-### Trade management knobs
-
-Key configurable parameters include:
-
-- `symbol`, `interval`, `period`
-- `initial_capital`
-- `risk_fraction`
-- `tp1_fraction`
-- stop placement rules (range-multiple, fixed, ATR-based)
-- end-of-week exit (e.g. close on Friday)
-
-### Outputs
-
-Backtests produce:
-- `equity_curve.png`
-- `trades.csv` (trade-by-trade log)
-- `metrics.json` (summary stats)
-
-Typical summary metrics:
-- total return
-- max drawdown
-- win rate
-- average win / average loss
-- profit factor
-- Sharpe (if using bar returns)
-- exposure and trade count
-
----
-
-## What this project demonstrates
-
-This repo is intentionally *simple* but “quant-structured”:
-
-- separation of **research** vs **execution/backtest** code,
-- risk-based sizing rather than fixed position units,
-- layered exits (a realistic trade-management technique),
-- explicit parameterisation,
-- repeatable output artefacts.
-
----
-
-## Important caveat: strategy saturation and regime dependence
-
-The Monday range idea is widely known. In modern markets:
-
-- simple rules often degrade as they become crowded,
-- edge is frequently **regime-dependent** (trend vs mean-reversion),
-- transaction costs/slippage can eliminate apparent backtest edge.
-
-So a “vanilla” sweep-and-fade strategy is unlikely to be robust in current conditions without additional structure.
-
----
-
-## Limitations
-
-This project is not a production trading engine:
-
-- no realistic slippage model by default,
-- limited transaction cost modelling,
-- depends on Yahoo Finance data quality,
-- no corporate actions nuance for some instruments,
-- assumes clean fills at bar boundaries.
-
-This is expected for a portfolio/research demo.
-
----
-
-## Extensions / Improvements
-
-To evolve this into something genuinely research-grade:
-
-### 1) Regime filters (time-series analysis)
-Only trade when conditions are favourable, e.g.:
-
-- moving average slope filter (trend/mean-reversion regime),
-- volatility filter (e.g. ATR percentile),
-- VIX filter (for indices),
-- range size filter (trade only when Monday range is “normal”).
-
-### 2) Better exits and dynamic targets
-- ATR-based stops/targets
-- trailing stops
-- time stops (exit after N bars if no follow-through)
-- multiple staggered take-profits beyond just TP1/TP2
-
-### 3) Parameter robustness checks
-- walk-forward testing
-- sensitivity analysis (heatmaps over TP1 fraction, risk fraction, stop multiplier)
-- sub-period performance (year-by-year)
-
-### 4) Cost-based optimisation (more quant-relevant)
-Instead of maximising F1/win-rate, optimise **expected value**:
-
-- include per-trade fee/slippage assumptions,
-- maximise expectancy or risk-adjusted return under constraints.
-
-### 5) ML-assisted filtering (optional, and harder)
-Use ML *not* to “predict price”, but to decide **when the pattern is worth trading**.
-
-Example:
-- Build a dataset where each sweep event is a row.
-- Features: Monday range size, volatility, trend indicators, day/time, macro proxies.
-- Label: whether midpoint/opposite boundary was reached.
-- Train a classifier (logistic regression / gradient boosting) to output a probability of success.
-- Trade only if probability exceeds a threshold (and size positions proportionally).
-
-This often works better than trying to predict raw returns.
-
----
-
-## Takeaways
-
-- Splitting research and backtesting code makes the process clearer and more defensible.
-- In imbalanced/conditional setups, it’s critical to quantify hit rates and failure modes.
-- A well-known discretionary pattern is rarely robust “as-is”; regime filters and execution realism matter.
-- The right next step is **time-series aware validation** (walk-forward) and **robustness checks**, not just adding complexity.
-
----
-
-## Quickstart
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run research:
-
-```bash
-python research_monday_range.py --symbol BTC-USD --interval 4h --period 2y
-```
-
-Run backtest:
-
-```bash
-python backtest_monday_range.py --symbol BTC-USD --interval 4h --period 2y
-```
-
-Run the research dashboard (some pages write generated local outputs):
-
-```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python scripts/verify_release.py
 streamlit run dashboard.py
 ```
 
----
+The five pages are:
 
-## Disclaimer
+1. **Overview** — final conclusion, holdout equity, drawdown, and weekly returns;
+2. **Strategy & Method** — accessible rules with execution and accounting details;
+3. **Research Results** — separated development, walk-forward, and holdout evidence;
+4. **Robustness & Uncertainty** — costs, bootstrap, direction, time, gaps, and parameter sensitivity;
+5. **Explore** — an explicitly noncanonical, in-memory sandbox limited to pre-holdout dates.
 
-This repository is provided for educational purposes only. Past performance does not guarantee future results.
+Explore never writes to `reports/experiments/`, cannot overlap the consumed holdout, and cannot overwrite the canonical result.
+
+## Reproduce and verify
+
+```bash
+python scripts/verify_release.py
+python -m unittest discover -s tests -q
+```
+
+These commands verify the frozen protocol and dataset identities, both one-time holdout access markers, all sealed result sidecars, the canonical candidate and conclusion, strategy behavior, accounting, execution, leakage guards, bootstrapping, result loading, and all five app pages. They do **not** rerun the holdout.
+
+Protocol execution code remains available for audit in [`run_protocol_v1.py`](run_protocol_v1.py) and [`src/protocol_v1.py`](src/protocol_v1.py). The final holdout is already consumed; do not invoke it again. See the [final research report](docs/research/MONDAY_RANGE_PROTOCOL_V1_FINAL_REPORT.md), [frozen protocol](docs/research/MONDAY_RANGE_PROTOCOL_V1.md), [methodology](docs/METHODOLOGY.md), and [deployment guide](docs/DEPLOYMENT.md).
+
+## Repository map
+
+```text
+configs/research/     frozen machine-readable protocol
+data/canonical/       immutable BTCUSDT input and manifest
+src/                  strategy, engine, data, evaluation, protocol, UI backend
+tests/                maintained scientific and presentation tests
+reports/experiments/  one tracked sealed canonical experiment bundle
+docs/research/        protocol, executor notes, and final report
+archive/legacy/       superseded material retained for provenance
+dashboard.py          public Streamlit application
+```
+
+## Limitations
+
+- Hourly OHLC cannot resolve every intrabar path.
+- Synthetic shorts omit borrowing, financing, and live venue constraints.
+- This is a single-asset, single-venue historical study.
+- Earlier exploratory strategy development creates broader data-snooping risk.
+- The final test contains only 52 independent weekly units and 43 trades.
+- Fixed fees and slippage omit latency, market impact, rejects, and operational failures.
+- A finite grid winner is not a globally optimal strategy.
+
+This repository demonstrates a controlled quantitative research process. It is not investment advice or evidence of a production-ready trading strategy.
