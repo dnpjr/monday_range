@@ -214,6 +214,9 @@ class DashboardActionsTests(unittest.TestCase):
                 fee_bps=10.0,
                 slippage_bps=5.0,
                 risk_fraction=0.02,
+                risk_base="current_equity",
+                max_leverage=1.0,
+                intrabar_policy="conservative_stop_first",
                 tp1_range_fraction=0.5,
                 tp2_range_fraction=1.0,
                 tp2_to_full=0.5,
@@ -246,6 +249,9 @@ class DashboardActionsTests(unittest.TestCase):
                 fee_bps=10.0,
                 slippage_bps=5.0,
                 risk_fraction=0.02,
+                risk_base="current_equity",
+                max_leverage=1.0,
+                intrabar_policy="conservative_stop_first",
                 tp1_range_fraction=0.5,
                 tp2_range_fraction=1.0,
                 tp2_to_full=0.5,
@@ -332,26 +338,27 @@ class DashboardActionsTests(unittest.TestCase):
         self.assertEqual(format_hours(None), "N/A")
 
     def test_stop_mode_label_mapping(self) -> None:
-        self.assertEqual(stop_mode_value("Opposite boundary"), "opposite_boundary")
-        self.assertEqual(stop_mode_value("Range fraction"), "range_fraction")
-        self.assertEqual(stop_mode_value("Fixed percent"), "fixed_pct")
-        self.assertEqual(stop_mode_label("opposite_boundary"), "Opposite boundary")
+        self.assertEqual(stop_mode_value("Swept boundary"), "swept_boundary")
+        self.assertEqual(stop_mode_value("Swept boundary plus range offset"), "swept_boundary_offset")
+        self.assertEqual(stop_mode_value("Fixed percent from entry"), "entry_fixed_pct")
+        self.assertEqual(stop_mode_value("Opposite boundary"), "swept_boundary_offset")
+        self.assertEqual(stop_mode_label("opposite_boundary"), "Swept boundary plus range offset")
 
     def test_stop_mode_visible_inputs(self) -> None:
         self.assertEqual(
-            stop_mode_visible_inputs("range_fraction"),
+            stop_mode_visible_inputs("swept_boundary_offset"),
             {"show_stop_range_fraction": True, "show_stop_pct": False},
         )
         self.assertEqual(
-            stop_mode_visible_inputs("fixed_pct"),
+            stop_mode_visible_inputs("entry_fixed_pct"),
             {"show_stop_range_fraction": False, "show_stop_pct": True},
         )
         self.assertEqual(
-            stop_mode_visible_inputs("opposite_boundary"),
+            stop_mode_visible_inputs("swept_boundary"),
             {"show_stop_range_fraction": False, "show_stop_pct": False},
         )
-        self.assertEqual(default_stop_mode_for_context("research_lab"), "range_fraction")
-        self.assertEqual(default_stop_mode_for_context("backtest_runner"), "opposite_boundary")
+        self.assertEqual(default_stop_mode_for_context("research_lab"), "swept_boundary_offset")
+        self.assertEqual(default_stop_mode_for_context("backtest_runner"), "swept_boundary_offset")
 
     def test_normalize_event_mode(self) -> None:
         self.assertEqual(normalize_event_mode("strategy_entries"), "strategy_signal")

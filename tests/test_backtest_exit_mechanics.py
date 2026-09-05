@@ -124,7 +124,9 @@ class BacktestExitMechanicsTests(unittest.TestCase):
             initial_capital=10_000.0,
             risk_per_trade=100.0,
         )
-        self.assertLess(float(t_large.iloc[0]["pnl"]), float(t_small.iloc[0]["pnl"]))
+        # The entry bar opens beyond TP1, so gap-aware execution fills the partial
+        # at the open. A larger partial leaves less quantity for the later adverse gap.
+        self.assertGreater(float(t_large.iloc[0]["pnl"]), float(t_small.iloc[0]["pnl"]))
 
     def test_stop_mode_range_fraction(self) -> None:
         df = add_monday_range(_stop_mode_df())

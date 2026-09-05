@@ -122,7 +122,7 @@ def generate_grid(
     tp1_range_fractions = [0.5] if tp1_range_fractions is None else tp1_range_fractions
     tp1_close_fractions = [0.5] if tp1_close_fractions is None else tp1_close_fractions
     move_stop_to_breakeven_after_tp1_values = [True] if move_stop_to_breakeven_after_tp1_values is None else move_stop_to_breakeven_after_tp1_values
-    stop_modes = ["opposite_boundary"] if stop_modes is None else stop_modes
+    stop_modes = ["swept_boundary_offset"] if stop_modes is None else stop_modes
     stop_range_fractions = [1.0] if stop_range_fractions is None else stop_range_fractions
 
     tp2_pairs: list[tuple[float, float]] = []
@@ -224,7 +224,7 @@ def build_sweep_row(
     max_entry_hour_utc: int | None,
     tp1_close_fraction: float = 0.5,
     move_stop_to_breakeven_after_tp1: bool = True,
-    stop_mode: str = "opposite_boundary",
+    stop_mode: str = "swept_boundary_offset",
     stop_range_fraction: float = 1.0,
 ) -> dict[str, Any]:
     total_fees_paid = float(summary.get("total_fees_paid", 0.0))
@@ -313,6 +313,9 @@ def run_sweep(
     move_stop_to_breakeven_after_tp1_values: list[bool] | None = None,
     stop_modes: list[str] | None = None,
     stop_range_fractions: list[float] | None = None,
+    risk_base: str = "current_equity",
+    max_leverage: float = 1.0,
+    intrabar_policy: str = "conservative_stop_first",
 ) -> tuple[pd.DataFrame, Path]:
     initial_cash = 10_000.0
 
@@ -363,6 +366,10 @@ def run_sweep(
             df_features,
             initial_capital=initial_cash,
             risk_per_trade=risk_per_trade,
+            risk_fraction=risk_fraction,
+            risk_base=risk_base,
+            max_leverage=max_leverage,
+            intrabar_policy=intrabar_policy,
             stop_mult=1.0,
             tp1_frac=0.5,
             tp2_to_full=tp2_to_full,
@@ -437,6 +444,10 @@ def run_sweep(
         "fee_bps": fee_bps,
         "slippage_bps": slippage_bps,
         "risk_fractions": risk_fractions,
+        "risk_base": risk_base,
+        "max_leverage": max_leverage,
+        "intrabar_policy": intrabar_policy,
+        "accounting_version": "marked_equity_v1",
         "tp2_to_full_values": tp2_to_full_values,
         "friday_cutoff_hours_utc": friday_cutoff_hours_utc,
         "min_range_pcts": ([None] if min_range_pcts is None else min_range_pcts),
@@ -452,7 +463,7 @@ def run_sweep(
         ),
         "tp1_close_fractions": ([0.5] if tp1_close_fractions is None else tp1_close_fractions),
         "move_stop_to_breakeven_after_tp1_values": ([True] if move_stop_to_breakeven_after_tp1_values is None else move_stop_to_breakeven_after_tp1_values),
-        "stop_modes": (["opposite_boundary"] if stop_modes is None else stop_modes),
+        "stop_modes": (["swept_boundary_offset"] if stop_modes is None else stop_modes),
         "stop_range_fractions": ([1.0] if stop_range_fractions is None else stop_range_fractions),
         "combinations": len(combos),
     }
@@ -476,6 +487,9 @@ def main() -> None:
     ap.add_argument("--fee_bps", type=float, default=0.0)
     ap.add_argument("--slippage_bps", type=float, default=0.0)
     ap.add_argument("--risk_fractions", nargs="+", default=["0.005,0.01,0.02"])
+    ap.add_argument("--risk_base", choices=["current_equity", "initial_capital"], default="current_equity")
+    ap.add_argument("--max_leverage", type=float, default=1.0)
+    ap.add_argument("--intrabar_policy", choices=["conservative_stop_first", "target_first"], default="conservative_stop_first")
     ap.add_argument("--tp2_to_full_values", nargs="+", default=["0.5,0.75,1.0"])
     ap.add_argument("--friday_cutoff_hours_utc", nargs="+", default=["20,21,22,23"])
     ap.add_argument("--min_range_pcts", nargs="+", default=["none"])
@@ -487,7 +501,7 @@ def main() -> None:
     ap.add_argument("--tp2_range_fraction_values", nargs="+", default=None)
     ap.add_argument("--tp1_close_fractions", nargs="+", default=["0.5"])
     ap.add_argument("--move_stop_to_breakeven_after_tp1_values", nargs="+", default=["true"])
-    ap.add_argument("--stop_modes", nargs="+", default=["opposite_boundary"])
+    ap.add_argument("--stop_modes", nargs="+", default=["swept_boundary_offset"])
     ap.add_argument("--stop_range_fractions", nargs="+", default=["1.0"])
     args = ap.parse_args()
 
@@ -509,7 +523,7 @@ def main() -> None:
         name="move_stop_to_breakeven_after_tp1_values",
     )
     stop_modes = [s.strip() for s in _normalize_grid_tokens(args.stop_modes, name="stop_modes")]
-    valid_stop_modes = {"opposite_boundary", "range_fraction", "fixed_pct"}
+    valid_stop_modes = {"swept_boundary", "swept_boundary_offset", "entry_fixed_pct", "opposite_boundary", "range_fraction", "fixed_pct"}
     bad_stop_modes = [s for s in stop_modes if s not in valid_stop_modes]
     if bad_stop_modes:
         raise ValueError(f"Invalid stop_modes: {bad_stop_modes}")
@@ -540,6 +554,9 @@ def main() -> None:
         move_stop_to_breakeven_after_tp1_values=move_stop_to_breakeven_after_tp1_values,
         stop_modes=stop_modes,
         stop_range_fractions=stop_range_fractions,
+        risk_base=args.risk_base,
+        max_leverage=float(args.max_leverage),
+        intrabar_policy=args.intrabar_policy,
     )
 
     print("=== Parameter sweep complete ===")

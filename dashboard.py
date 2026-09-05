@@ -163,7 +163,7 @@ def _render_exit_mechanics_controls(
     prefix: str,
     *,
     friday_default: int,
-    default_stop_mode_value: str = "opposite_boundary",
+    default_stop_mode_value: str = "swept_boundary_offset",
     default_stop_range_fraction: float = 1.0,
 ) -> dict:
     e1, e2 = st.columns(2)
@@ -195,7 +195,7 @@ def _render_exit_mechanics_controls(
         if default_stop_mode_value in STOP_MODE_LABEL_TO_VALUE.values()
         else 0,
         key=f"{prefix}_stop_mode",
-        help="Opposite boundary: Use the opposite side of the Monday range as stop.",
+        help="Swept boundary uses the swept Monday boundary; the offset mode places the stop a configured Monday-range width beyond it.",
     )
     stop_mode = stop_mode_value(stop_mode_label_selected)
     visible = stop_mode_visible_inputs(stop_mode)
@@ -438,7 +438,7 @@ if page == "Backtest Runner":
         fee_bps = float(c1.number_input("Fee, bps", value=10.0, step=0.5, help="Round-trip trading fee assumption in basis points."))
         slippage_bps = float(c2.number_input("Slippage, bps", value=5.0, step=0.5, help="Entry/exit slippage assumption in basis points."))
         c3, c4, c5 = st.columns(3)
-        risk_fraction = float(c3.number_input("Risk per trade", value=0.02, step=0.005, format="%.6f", help="Fraction of initial cash risked per trade."))
+        risk_fraction = float(c3.number_input("Risk per trade", value=0.02, step=0.005, format="%.6f", help="Fraction of the selected portfolio equity base risked at the initial stop."))
         direction = c4.selectbox("Direction", ["both", "long_only", "short_only"], index=0)
         strategy_label = c5.selectbox(
             "Strategy",
@@ -447,12 +447,16 @@ if page == "Backtest Runner":
             help="Original sweep/retest strategy uses only actual legacy sweep/retest signals.",
         )
         strategy = "sweep_retest" if strategy_label == "Original sweep/retest strategy" else "current_monday_range"
+        c6, c7, c8 = st.columns(3)
+        risk_base = c6.selectbox("Risk base", ["current_equity", "initial_capital"], index=0, help="Current equity compounds risk; initial capital preserves fixed-base fractional sizing.")
+        max_leverage = float(c7.number_input("Maximum gross leverage", min_value=0.1, value=1.0, step=0.25, help="Caps entry notional as a multiple of current equity."))
+        intrabar_policy = c8.selectbox("Intrabar policy", ["conservative_stop_first", "target_first"], index=0, help="OHLC cannot resolve stop/target order; conservative stop-first is the research default.")
 
     if strategy == "sweep_retest":
         st.info("Original sweep/retest strategy: trades only actual legacy sweep/retest signals (first signal per week).")
 
     with st.expander("Exit Mechanics", expanded=True):
-        default_stop_mode = "range_fraction" if strategy == "sweep_retest" else default_stop_mode_for_context("backtest_runner")
+        default_stop_mode = "swept_boundary_offset"
         default_stop_frac = 0.5 if strategy == "sweep_retest" else 1.0
         exit_cfg = _render_exit_mechanics_controls(
             "bt",
@@ -535,6 +539,9 @@ if page == "Backtest Runner":
         "fee_bps": fee_bps,
         "slippage_bps": slippage_bps,
         "risk_fraction": risk_fraction,
+        "risk_base": risk_base,
+        "max_leverage": max_leverage,
+        "intrabar_policy": intrabar_policy,
         "tp1_range_fraction": tp1_range_fraction,
         "tp2_range_fraction": tp2_range_fraction,
         "tp2_to_full": 1.0,
@@ -581,6 +588,9 @@ if page == "Backtest Runner":
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
                 risk_fraction=risk_fraction,
+                risk_base=risk_base,
+                max_leverage=max_leverage,
+                intrabar_policy=intrabar_policy,
                 tp1_range_fraction=tp1_range_fraction,
                 tp2_range_fraction=tp2_range_fraction,
                 friday_cutoff_hour_utc=friday_cutoff_hour_utc,
@@ -981,7 +991,7 @@ if page == "Research Lab":
     lab_exit = {
         "tp1_range_fraction": 0.5,
         "tp2_range_fraction": 1.0,
-        "stop_mode": "range_fraction",
+        "stop_mode": "swept_boundary_offset",
         "stop_range_fraction": 1.0,
         "stop_pct": 0.01,
         "friday_cutoff_hour_utc": 23,

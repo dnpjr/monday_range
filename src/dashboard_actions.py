@@ -29,11 +29,19 @@ from src.research import analyze_weekly_sweep_signals
 
 RESEARCH_MODE_ONLY = True
 STOP_MODE_LABEL_TO_VALUE = {
-    "Opposite boundary": "opposite_boundary",
-    "Range fraction": "range_fraction",
-    "Fixed percent": "fixed_pct",
+    "Swept boundary": "swept_boundary",
+    "Swept boundary plus range offset": "swept_boundary_offset",
+    "Fixed percent from entry": "entry_fixed_pct",
 }
 STOP_MODE_VALUE_TO_LABEL = {v: k for k, v in STOP_MODE_LABEL_TO_VALUE.items()}
+LEGACY_STOP_MODE_VALUES = {
+    "opposite_boundary": "swept_boundary_offset",
+    "range_fraction": "swept_boundary_offset",
+    "fixed_pct": "entry_fixed_pct",
+    "Opposite boundary": "swept_boundary_offset",
+    "Range fraction": "swept_boundary_offset",
+    "Fixed percent": "entry_fixed_pct",
+}
 
 
 def assert_research_mode_only() -> bool:
@@ -61,26 +69,28 @@ def format_float(value: float | None, decimals: int = 2) -> str:
 
 
 def stop_mode_label(mode_value: str) -> str:
-    return STOP_MODE_VALUE_TO_LABEL.get(mode_value, mode_value)
+    canonical = LEGACY_STOP_MODE_VALUES.get(mode_value, mode_value)
+    return STOP_MODE_VALUE_TO_LABEL.get(canonical, canonical)
 
 
 def stop_mode_value(mode_label: str) -> str:
-    return STOP_MODE_LABEL_TO_VALUE.get(mode_label, mode_label)
+    value = STOP_MODE_LABEL_TO_VALUE.get(mode_label, mode_label)
+    return LEGACY_STOP_MODE_VALUES.get(value, value)
 
 
 def stop_mode_visible_inputs(stop_mode: str) -> dict[str, bool]:
     mode = stop_mode_value(stop_mode)
     return {
-        "show_stop_range_fraction": mode == "range_fraction",
-        "show_stop_pct": mode == "fixed_pct",
+        "show_stop_range_fraction": mode == "swept_boundary_offset",
+        "show_stop_pct": mode == "entry_fixed_pct",
     }
 
 
 def default_stop_mode_for_context(context: str) -> str:
     c = str(context).strip().lower()
     if c == "research_lab":
-        return "range_fraction"
-    return "opposite_boundary"
+        return "swept_boundary_offset"
+    return "swept_boundary_offset"
 
 
 def normalize_event_mode(mode: str) -> str:
@@ -122,7 +132,7 @@ def run_research_lab_analysis(
     analysis_mode: str = "new_path_analysis",
     tp1_range_fraction: float = 0.5,
     tp2_range_fraction: float = 1.0,
-    stop_mode: str = "range_fraction",
+    stop_mode: str = "swept_boundary_offset",
     stop_range_fraction: float = 1.0,
     stop_pct: float = 0.01,
     friday_cutoff_hour_utc: int = 23,
@@ -273,6 +283,9 @@ def run_research_backtest(
     fee_bps: float = 10.0,
     slippage_bps: float = 5.0,
     risk_fraction: float = 0.02,
+    risk_base: str = "current_equity",
+    max_leverage: float = 1.0,
+    intrabar_policy: str = "conservative_stop_first",
     tp1_range_fraction: float | None = 0.5,
     tp2_range_fraction: float | None = 1.0,
     tp2_to_full: float = 1.0,
@@ -305,6 +318,9 @@ def run_research_backtest(
         fee_bps=fee_bps,
         slippage_bps=slippage_bps,
         risk_fraction=risk_fraction,
+        risk_base=risk_base,
+        max_leverage=max_leverage,
+        intrabar_policy=intrabar_policy,
         tp1_range_fraction=tp1_range_fraction,
         tp2_range_fraction=tp2_range_fraction,
         tp2_to_full=tp2_to_full,
@@ -410,6 +426,9 @@ def _base_backtest_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         "fee_bps",
         "slippage_bps",
         "risk_fraction",
+        "risk_base",
+        "max_leverage",
+        "intrabar_policy",
         "tp1_range_fraction",
         "tp2_range_fraction",
         "tp2_to_full",
@@ -432,6 +451,9 @@ def _base_backtest_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         "single_target_level",
     ]
     out = {k: config.get(k) for k in keys}
+    out["risk_base"] = config.get("risk_base") or "current_equity"
+    out["max_leverage"] = float(config.get("max_leverage") or 1.0)
+    out["intrabar_policy"] = config.get("intrabar_policy") or "conservative_stop_first"
     out["output_dir"] = config.get("output_dir", "data/backtests")
     return out
 

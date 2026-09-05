@@ -101,7 +101,7 @@ def generate_sweep_retest_grid(
     tp2_range_fractions: list[float] | None = None,
     friday_cutoff_hours_utc: list[int] | None = None,
     exit_styles: list[str] | None = None,
-    stop_mode: str = "range_fraction",
+    stop_mode: str = "swept_boundary_offset",
     direction: str = "both",
 ) -> list[dict[str, Any]]:
     tp1_range_fractions = [0.35, 0.40, 0.45, 0.50, 0.55] if tp1_range_fractions is None else [float(v) for v in tp1_range_fractions]
@@ -193,6 +193,9 @@ def _evaluate_grid_on_features(
     fee_bps: float,
     slippage_bps: float,
     initial_cash: float = 10_000.0,
+    risk_base: str = "current_equity",
+    max_leverage: float = 1.0,
+    intrabar_policy: str = "conservative_stop_first",
 ) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
 
@@ -208,7 +211,7 @@ def _evaluate_grid_on_features(
         max_entry_hour_utc = combo.get("max_entry_hour_utc")
         tp1_close_fraction = float(combo["tp1_close_fraction"])
         move_stop_to_breakeven_after_tp1 = bool(combo.get("move_stop_to_breakeven_after_tp1", True))
-        stop_mode = str(combo.get("stop_mode", "range_fraction"))
+        stop_mode = str(combo.get("stop_mode", "swept_boundary_offset"))
         stop_range_fraction = float(combo["stop_range_fraction"])
         tp2_to_full = float(combo.get("tp2_to_full", 1.0))
         exit_style = str(combo.get("exit_style", "partial_tp2"))
@@ -224,6 +227,10 @@ def _evaluate_grid_on_features(
             strategy=strategy,
             initial_capital=initial_cash,
             risk_per_trade=risk_per_trade,
+            risk_fraction=risk_fraction,
+            risk_base=risk_base,
+            max_leverage=max_leverage,
+            intrabar_policy=intrabar_policy,
             stop_mult=1.0,
             tp1_frac=0.5,
             tp2_to_full=tp2_to_full,
@@ -333,6 +340,9 @@ def run_walk_forward(
     tp2_range_fractions: list[float] | None = None,
     friday_cutoff_hours_utc: list[int] | None = None,
     exit_styles: list[str] | None = None,
+    risk_base: str = "current_equity",
+    max_leverage: float = 1.0,
+    intrabar_policy: str = "conservative_stop_first",
     # Legacy compatibility args (optional)
     risk_fractions: list[float] | None = None,
     tp2_to_full_values: list[float] | None = None,
@@ -360,7 +370,7 @@ def run_walk_forward(
     friday_cutoff_hours_utc = [20, 23] if friday_cutoff_hours_utc is None else friday_cutoff_hours_utc
     exit_styles = ["partial_tp2", "single_target"] if exit_styles is None else exit_styles
     if stop_modes:
-        if "range_fraction" in stop_modes:
+        if "range_fraction" in stop_modes or "swept_boundary_offset" in stop_modes:
             pass
         else:
             # Sweep/retest walk-forward is defined with range-fraction stops.
@@ -391,7 +401,7 @@ def run_walk_forward(
         tp2_range_fractions=tp2_range_fractions,
         friday_cutoff_hours_utc=friday_cutoff_hours_utc,
         exit_styles=exit_styles,
-        stop_mode="range_fraction",
+        stop_mode="swept_boundary_offset",
         direction="both",
     )
 
@@ -431,6 +441,9 @@ def run_walk_forward(
             end=train_end,
             fee_bps=float(fee_bps),
             slippage_bps=float(slippage_bps),
+            risk_base=risk_base,
+            max_leverage=max_leverage,
+            intrabar_policy=intrabar_policy,
         )
         if train_df.empty:
             fold_summary_rows.append(
@@ -470,7 +483,7 @@ def run_walk_forward(
                 "max_entry_hour_utc": (None if ("max_entry_hour_utc" not in sel or pd.isna(sel["max_entry_hour_utc"])) else int(sel["max_entry_hour_utc"])),
                 "tp1_close_fraction": float(sel["tp1_close_fraction"]),
                 "move_stop_to_breakeven_after_tp1": bool(sel.get("move_stop_to_breakeven_after_tp1", True)),
-                "stop_mode": str(sel.get("stop_mode", "range_fraction")),
+                "stop_mode": str(sel.get("stop_mode", "swept_boundary_offset")),
                 "stop_range_fraction": float(sel["stop_range_fraction"]),
                 "exit_style": str(sel.get("exit_style", "partial_tp2")),
                 "single_target_level": str(sel.get("single_target_level", "tp1")),
@@ -485,6 +498,9 @@ def run_walk_forward(
                 end=test_end,
                 fee_bps=float(fee_bps),
                 slippage_bps=float(slippage_bps),
+                risk_base=risk_base,
+                max_leverage=max_leverage,
+                intrabar_policy=intrabar_policy,
             )
             if test_eval_df.empty:
                 continue
@@ -644,13 +660,17 @@ def run_walk_forward(
         "fee_bps": float(fee_bps),
         "slippage_bps": float(slippage_bps),
         "risk_fraction": float(risk_fraction),
+        "risk_base": risk_base,
+        "max_leverage": float(max_leverage),
+        "intrabar_policy": intrabar_policy,
+        "accounting_version": "marked_equity_v1",
         "tp1_range_fractions": list(tp1_range_fractions),
         "stop_range_fractions": list(stop_range_fractions),
         "tp1_close_fractions": list(tp1_close_fractions),
         "tp2_range_fractions": list(tp2_range_fractions),
         "friday_cutoff_hours_utc": list(friday_cutoff_hours_utc),
         "exit_styles": list(exit_styles),
-        "stop_mode": "range_fraction",
+        "stop_mode": "swept_boundary_offset",
         "direction": "both",
         "folds": folds,
         "mode_parameters_by_fold_metric": {k: _to_jsonable(v) for k, v in mode_params.items()},
@@ -684,6 +704,9 @@ def main() -> None:
     ap.add_argument("--output_dir", default="data/walk_forward")
 
     ap.add_argument("--risk_fraction", type=float, default=0.02)
+    ap.add_argument("--risk_base", choices=["current_equity", "initial_capital"], default="current_equity")
+    ap.add_argument("--max_leverage", type=float, default=1.0)
+    ap.add_argument("--intrabar_policy", choices=["conservative_stop_first", "target_first"], default="conservative_stop_first")
     ap.add_argument("--tp1_range_fractions", nargs="+", default=["0.35,0.40,0.45,0.50,0.55"])
     ap.add_argument("--stop_range_fractions", nargs="+", default=["0.75,1.0,1.1,1.25"])
     ap.add_argument("--tp1_close_fractions", nargs="+", default=["0.75,0.90,0.99,1.0"])
@@ -714,6 +737,9 @@ def main() -> None:
         top_n=int(args.top_n),
         output_dir=args.output_dir,
         risk_fraction=float(args.risk_fraction),
+        risk_base=args.risk_base,
+        max_leverage=float(args.max_leverage),
+        intrabar_policy=args.intrabar_policy,
         tp1_range_fractions=parse_float_grid(args.tp1_range_fractions, name="tp1_range_fractions"),
         stop_range_fractions=parse_float_grid(args.stop_range_fractions, name="stop_range_fractions"),
         tp1_close_fractions=parse_float_grid(args.tp1_close_fractions, name="tp1_close_fractions"),

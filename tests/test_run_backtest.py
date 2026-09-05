@@ -188,7 +188,10 @@ class RunBacktestTests(unittest.TestCase):
             )
         kwargs = bt.call_args.kwargs
         self.assertEqual(kwargs["strategy"], "sweep_retest")
-        self.assertEqual(kwargs["stop_mode"], "range_fraction")
+        self.assertEqual(kwargs["stop_mode"], "swept_boundary_offset")
+        self.assertEqual(kwargs["risk_base"], "current_equity")
+        self.assertEqual(kwargs["max_leverage"], 1.0)
+        self.assertEqual(kwargs["intrabar_policy"], "conservative_stop_first")
         self.assertEqual(kwargs["stop_range_fraction"], 0.5)
         self.assertEqual(out["summary"]["strategy"], "sweep_retest")
         self.assertEqual(out["summary"]["signal_count"], 2)

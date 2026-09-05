@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 
 from src.features import add_monday_range
-from src.backtest import backtest_sweep_fade
+from src.backtest import backtest_sweep_fade, canonical_stop_mode
 from src.metrics import equity_metrics, trade_metrics
 from src.research import analyze_weekly_sweep_signals
 
@@ -88,7 +88,14 @@ def build_summary(
     em = equity_metrics(df_out["equity"], bars_per_year=bars_per_year)
     tm = trade_metrics(trades)
     final_equity = float(df_out["equity"].dropna().iloc[-1]) if len(df_out["equity"].dropna()) else float(initial_cash)
+    final_cash = float(df_out["cash"].dropna().iloc[-1]) if "cash" in df_out and len(df_out["cash"].dropna()) else final_equity
+    final_realized = float(df_out["realized_pnl"].dropna().iloc[-1]) if "realized_pnl" in df_out and len(df_out["realized_pnl"].dropna()) else final_cash - float(initial_cash)
+    final_unrealized = float(df_out["unrealized_pnl"].dropna().iloc[-1]) if "unrealized_pnl" in df_out and len(df_out["unrealized_pnl"].dropna()) else final_equity - final_cash
     total_fees = float(df_out["fees_paid"].sum()) if "fees_paid" in df_out.columns else 0.0
+    exposure = float(df_out["exposed"].mean()) if "exposed" in df_out.columns else (float((df_out["gross_notional"] > 0).mean()) if "gross_notional" in df_out.columns else 0.0)
+    total_turnover = float(df_out["turnover"].sum()) if "turnover" in df_out.columns else 0.0
+    average_equity = float(df_out["equity"].dropna().mean()) if len(df_out["equity"].dropna()) else float(initial_cash)
+    turnover_multiple = total_turnover / average_equity if average_equity > 0 else None
 
     best_trade = float(trades["pnl"].max()) if len(trades) else None
     worst_trade = float(trades["pnl"].min()) if len(trades) else None
@@ -103,15 +110,27 @@ def build_summary(
         "single_target_level": single_target_level,
         "initial_cash": float(initial_cash),
         "final_equity": final_equity,
-        "final_cash": final_equity,
+        "final_cash": final_cash,
+        "realized_pnl": final_realized,
+        "unrealized_pnl": final_unrealized,
         "total_return_pct": float((final_equity / float(initial_cash) - 1.0) * 100.0),
+        "cagr": em.get("cagr"),
+        "annualized_volatility": em.get("annualized_volatility"),
+        "sharpe": em.get("sharpe"),
+        "sortino": em.get("sortino"),
         "num_trades": int(tm.get("num_trades", 0)),
         "win_rate": tm.get("win_rate"),
         "average_trade_pnl": avg_trade_pnl,
         "best_trade": best_trade,
         "worst_trade": worst_trade,
         "total_fees_paid": total_fees,
+        "profit_factor": tm.get("profit_factor"),
+        "exposure_fraction": exposure,
+        "total_turnover_notional": total_turnover,
+        "turnover_multiple": turnover_multiple,
         "max_drawdown": em.get("max_drawdown"),
+        "mark_price": df_out.attrs.get("mark_price", "bar_close"),
+        "annualization_periods_per_year": em.get("annualization_periods_per_year"),
         "start_used": str(df_out.index.min()) if start_used is None else start_used,
         "end_used": str(df_out.index.max()) if end_used is None else end_used,
     }
@@ -149,6 +168,9 @@ def run_backtest_cached(
     fee_bps: float = 0.0,
     slippage_bps: float = 0.0,
     risk_fraction: float = 0.01,
+    risk_base: str = "current_equity",
+    max_leverage: float = 1.0,
+    intrabar_policy: str = "conservative_stop_first",
     tp1_range_fraction: float | None = 0.5,
     tp2_range_fraction: float | None = 1.0,
     tp2_to_full: float = 1.0,
@@ -188,11 +210,21 @@ def run_backtest_cached(
         if single_target_mode_resolved and exit_style != "single_target":
             exit_style = "single_target"
 
+    if risk_base not in {"current_equity", "initial_capital"}:
+        raise ValueError("risk_base must be 'current_equity' or 'initial_capital'")
+    if max_leverage <= 0:
+        raise ValueError("max_leverage must be > 0")
+    if intrabar_policy not in {"conservative_stop_first", "target_first"}:
+        raise ValueError("invalid intrabar_policy")
+
     if stop_mode is None:
-        stop_mode_resolved = "range_fraction" if strategy == "sweep_retest" else "opposite_boundary"
+        stop_mode_resolved = "swept_boundary_offset"
     else:
-        stop_mode_resolved = stop_mode
-    if stop_range_fraction is None:
+        stop_mode_resolved = canonical_stop_mode(stop_mode)
+    if stop_mode == "opposite_boundary":
+        # Historical runner behavior fixed stop_mult at 1.0 and ignored stop_range_fraction.
+        stop_range_fraction_resolved = 1.0
+    elif stop_range_fraction is None:
         stop_range_fraction_resolved = 0.5 if strategy == "sweep_retest" else 1.0
     else:
         stop_range_fraction_resolved = float(stop_range_fraction)
@@ -214,6 +246,10 @@ def run_backtest_cached(
         strategy=strategy,
         initial_capital=initial_cash,
         risk_per_trade=risk_per_trade,
+        risk_fraction=float(risk_fraction),
+        risk_base=risk_base,
+        max_leverage=float(max_leverage),
+        intrabar_policy=intrabar_policy,
         stop_mult=1.0,
         tp1_frac=0.5,
         tp2_to_full=float(tp2_to_full),
@@ -265,7 +301,13 @@ def run_backtest_cached(
         "fee_bps": fee_bps,
         "slippage_bps": slippage_bps,
         "risk_fraction": risk_fraction,
+        "risk_base": risk_base,
         "risk_per_trade": risk_per_trade,
+        "initial_risk_capital": initial_cash * float(risk_fraction),
+        "max_leverage": max_leverage,
+        "intrabar_policy": intrabar_policy,
+        "accounting_version": "marked_equity_v1",
+        "mark_price": "bar_close",
         "tp1_range_fraction": tp1_range_fraction,
         "tp2_range_fraction": tp2_range_fraction,
         "tp2_to_full": tp2_to_full,
@@ -314,7 +356,10 @@ def main() -> None:
     ap.add_argument("--end", default=None)
     ap.add_argument("--fee_bps", type=float, default=0.0)
     ap.add_argument("--slippage_bps", type=float, default=0.0)
-    ap.add_argument("--risk_fraction", type=float, default=0.01)
+    ap.add_argument("--risk_fraction", type=float, default=0.01, help="Fraction of the selected risk base risked at the initial stop.")
+    ap.add_argument("--risk_base", choices=["current_equity", "initial_capital"], default="current_equity")
+    ap.add_argument("--max_leverage", type=float, default=1.0, help="Maximum gross entry notional as a multiple of current equity.")
+    ap.add_argument("--intrabar_policy", choices=["conservative_stop_first", "target_first"], default="conservative_stop_first")
     ap.add_argument("--tp1_range_fraction", type=float, default=0.5)
     ap.add_argument("--tp2_range_fraction", type=float, default=1.0)
     ap.add_argument("--tp2_to_full", type=float, default=1.0, help="Legacy alias for TP2; prefer --tp2_range_fraction.")
@@ -327,7 +372,12 @@ def main() -> None:
     ap.add_argument("--sma_period", type=int, default=None)
     ap.add_argument("--tp1_to_mid", type=float, default=1.0, help="Legacy alias for TP1; prefer --tp1_range_fraction.")
     ap.add_argument("--tp1_close_fraction", type=float, default=0.5)
-    ap.add_argument("--stop_mode", choices=["opposite_boundary", "range_fraction", "fixed_pct"], default=None)
+    ap.add_argument(
+        "--stop_mode",
+        choices=["swept_boundary", "swept_boundary_offset", "entry_fixed_pct", "opposite_boundary", "range_fraction", "fixed_pct"],
+        default=None,
+        help="Explicit stop semantic; legacy names remain readable with a deprecation warning.",
+    )
     ap.add_argument("--stop_range_fraction", type=float, default=None)
     ap.add_argument("--stop_pct", type=float, default=0.01)
     ap.add_argument("--move_stop_to_breakeven_after_tp1", action=argparse.BooleanOptionalAction, default=True)
@@ -347,6 +397,9 @@ def main() -> None:
         fee_bps=float(args.fee_bps),
         slippage_bps=float(args.slippage_bps),
         risk_fraction=float(args.risk_fraction),
+        risk_base=args.risk_base,
+        max_leverage=float(args.max_leverage),
+        intrabar_policy=args.intrabar_policy,
         tp1_range_fraction=args.tp1_range_fraction,
         tp2_range_fraction=args.tp2_range_fraction,
         tp2_to_full=float(args.tp2_to_full),

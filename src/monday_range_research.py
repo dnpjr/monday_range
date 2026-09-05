@@ -137,7 +137,7 @@ def analyze_monday_range_research(
     tp2_range_fraction: float | None = 1.0,
     tp1_to_mid: float = 1.0,  # legacy alias
     tp2_to_full: float = 1.0,  # legacy alias
-    stop_mode: str = "opposite_boundary",
+    stop_mode: str = "swept_boundary_offset",
     stop_range_fraction: float = 1.0,
     stop_pct: float = 0.01,
     stop_mult: float = 1.0,
@@ -236,14 +236,21 @@ def analyze_monday_range_research(
                 tp1_range_fraction=tp1_rf,
                 tp2_range_fraction=tp2_rf,
             )
-            if stop_mode == "opposite_boundary":
-                stop = float(mon_low - stop_mult * mon_range) if side == "LONG" else float(mon_high + stop_mult * mon_range)
-            elif stop_mode == "range_fraction":
-                stop = float(mon_low - stop_range_fraction * mon_range) if side == "LONG" else float(mon_high + stop_range_fraction * mon_range)
-            elif stop_mode == "fixed_pct":
+            legacy_stop_modes = {
+                "opposite_boundary": "swept_boundary_offset",
+                "range_fraction": "swept_boundary_offset",
+                "fixed_pct": "entry_fixed_pct",
+            }
+            resolved_stop_mode = legacy_stop_modes.get(stop_mode, stop_mode)
+            if resolved_stop_mode == "swept_boundary":
+                stop = float(mon_low) if side == "LONG" else float(mon_high)
+            elif resolved_stop_mode == "swept_boundary_offset":
+                offset = float(stop_mult) if stop_mode == "opposite_boundary" else float(stop_range_fraction)
+                stop = float(mon_low - offset * mon_range) if side == "LONG" else float(mon_high + offset * mon_range)
+            elif resolved_stop_mode == "entry_fixed_pct":
                 stop = float(entry_price * (1.0 - stop_pct)) if side == "LONG" else float(entry_price * (1.0 + stop_pct))
             else:
-                raise ValueError("stop_mode must be one of opposite_boundary/range_fraction/fixed_pct")
+                raise ValueError("stop_mode must be swept_boundary, swept_boundary_offset, or entry_fixed_pct")
 
             tp1_time = None
             tp2_time = None

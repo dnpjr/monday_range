@@ -15,6 +15,8 @@ The emphasis is on:
 
 > **Note:** This project is for educational/research purposes only and is not trading advice.
 
+> **Methodology status:** The canonical runner now uses marked bar-close equity, current-equity risk sizing, a 1× gross-notional cap, gap-aware fills, conservative stop-first OHLC handling, and end-of-data closure. See [Backtest methodology](docs/METHODOLOGY.md). Existing files under `results/`, `data/backtests/`, and `data/sweeps/` are legacy artifacts from the pre-correction engine and are not comparable with new runs.
+
 ---
 
 ## Concept
@@ -37,7 +39,7 @@ From **Tuesday onward**, look for a *sweep* beyond the Monday range followed by 
 **Long setup (sweep below)**
 - A candle trades **below** \(L_M\)
 - Then closes **back above** \(L_M\)
-- → enter **long** on the next bar open (or on the close, depending on the chosen convention)
+- → enter **long** on the next bar open
 
 **Short setup (sweep above)**
 - A candle trades **above** \(H_M\)
@@ -303,7 +305,7 @@ Run backtest:
 python backtest_monday_range.py --symbol BTC-USD --interval 4h --period 2y
 ```
 
-Run read-only dashboard:
+Run the research dashboard (some pages write generated local outputs):
 
 ```bash
 streamlit run dashboard.py
