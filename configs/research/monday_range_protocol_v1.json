@@ -1,6 +1,16 @@
 {
   "protocol_version": "monday_range_protocol_v1",
   "status": "frozen_before_corrected_results",
+  "amendment_history": [
+    {
+      "amendment": "development_start_complete_context_correction",
+      "previous_protocol_sha256": "5266a47fdf69e742ec455eb87986a423b3e5ae451757472558cac12d4e04d5ed",
+      "original_start_inclusive": "2021-05-24T00:00:00Z",
+      "amended_start_inclusive": "2021-05-31T00:00:00Z",
+      "reason": "The canonical dataset cannot provide a complete preceding ISO week for a 2021-05-24 training start.",
+      "timing": "Amended before any corrected canonical strategy performance was generated or viewed."
+    }
+  ],
   "dataset": {
     "version": "btcusdt_binance_spot_1h_v1",
     "sha256": "4d541711c323ac82e07bade75a522c0a48776c7d2e4eec7f45d8d9c4e00b41ce",
@@ -11,9 +21,9 @@
   },
   "partitions": {
     "development": {
-      "start_inclusive": "2021-05-24T00:00:00Z",
+      "start_inclusive": "2021-05-31T00:00:00Z",
       "end_exclusive": "2024-01-01T00:00:00Z",
-      "complete_iso_weeks": 136
+      "complete_iso_weeks": 135
     },
     "validation": {
       "start_inclusive": "2024-01-01T00:00:00Z",
@@ -35,7 +45,12 @@
         "start_inclusive": "2026-05-18T00:00:00Z",
         "end_exclusive": "2026-05-20T15:00:00Z"
       }
-    ]
+    ],
+    "initial_context_only": {
+      "start_inclusive": "2021-05-24T00:00:00Z",
+      "end_exclusive": "2021-05-31T00:00:00Z",
+      "complete_iso_weeks": 1
+    }
   },
   "hypothesis": {
     "primary": "After BTCUSDT sweeps beyond the completed UTC Monday range and a completed hourly candle closes back inside, entering the fade at the next hourly open has positive expected weekly net portfolio return after the frozen transaction-cost model.",
@@ -129,28 +144,28 @@
     "folds": [
       {
         "id": 1,
-        "train_start_inclusive": "2021-05-24T00:00:00Z",
+        "train_start_inclusive": "2021-05-31T00:00:00Z",
         "train_end_exclusive": "2024-01-01T00:00:00Z",
         "validation_start_inclusive": "2024-01-01T00:00:00Z",
         "validation_end_exclusive": "2024-06-17T00:00:00Z"
       },
       {
         "id": 2,
-        "train_start_inclusive": "2021-05-24T00:00:00Z",
+        "train_start_inclusive": "2021-05-31T00:00:00Z",
         "train_end_exclusive": "2024-06-17T00:00:00Z",
         "validation_start_inclusive": "2024-06-17T00:00:00Z",
         "validation_end_exclusive": "2024-12-02T00:00:00Z"
       },
       {
         "id": 3,
-        "train_start_inclusive": "2021-05-24T00:00:00Z",
+        "train_start_inclusive": "2021-05-31T00:00:00Z",
         "train_end_exclusive": "2024-12-02T00:00:00Z",
         "validation_start_inclusive": "2024-12-02T00:00:00Z",
         "validation_end_exclusive": "2025-05-19T00:00:00Z"
       }
     ],
     "context_rule": "compute features from canonical history with at least one complete preceding ISO week, reset portfolio at the fold start, and permit signals and entries only inside the fold",
-    "final_fit": "after walk-forward artifacts are sealed, rank the same 18 candidates on all pre-holdout data and select exactly one using the frozen objective",
+    "final_fit": "after walk-forward artifacts are sealed, rank the same 18 candidates on all pre-holdout evaluation data from 2021-05-31T00:00:00Z and select exactly one using the frozen objective",
     "failure_rule": "if no candidate meets the minimum trade count or fewer than three validation folds complete, stop without opening the holdout"
   },
   "selection_objective": {

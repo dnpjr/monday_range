@@ -2,6 +2,8 @@
 
 Status: **frozen before corrected strategy results are viewed**.
 
+> **Pre-results amendment:** The original development and expanding-training start of 2021-05-24 was amended to 2021-05-31. Canonical data begins on 2021-05-21 at 15:00 UTC, so the original boundary could not supply the required complete preceding ISO week. The week from 2021-05-24 through 2021-05-31 is now context-only. This correction was made before any corrected canonical strategy performance was generated or viewed. The preceding protocol SHA-256 was `5266a47fdf69e742ec455eb87986a423b3e5ae451757472558cac12d4e04d5ed`.
+
 This document preregisters the first canonical evaluation of the Monday Range strategy. It uses canonical BTCUSDT data and the corrected engine, but it does not contain or rely on strategy performance. The machine-readable source of truth is `configs/research/monday_range_protocol_v1.json`.
 
 ## Research question and hypotheses
@@ -22,11 +24,11 @@ All boundaries are UTC, Monday 00:00, and interpreted as `[start, end)`:
 
 | Partition | Start inclusive | End exclusive | Complete ISO weeks | Purpose |
 |---|---:|---:|---:|---|
-| Development | 2021-05-24 00:00 | 2024-01-01 00:00 | 136 | Exploration and training |
+| Development | 2021-05-31 00:00 | 2024-01-01 00:00 | 135 | Exploration and training |
 | Validation | 2024-01-01 00:00 | 2025-05-19 00:00 | 72 | Chronological selection-method validation |
 | Final holdout | 2025-05-19 00:00 | 2026-05-18 00:00 | 52 | One final confirmatory use |
 
-The partial opening interval from 2021-05-21 15:00 through 2021-05-24 00:00 and the partial final week from 2026-05-18 00:00 through the dataset end are excluded. The holdout boundary was chosen from coverage and calendar structure without viewing corrected outcomes.
+The partial opening interval from 2021-05-21 15:00 through 2021-05-24 00:00 and the partial final week from 2026-05-18 00:00 through the dataset end are excluded. The complete week from 2021-05-24 through 2021-05-31 is reserved exclusively as context for the first training window and cannot contribute trades or P&L. The holdout boundary was chosen from coverage and calendar structure without viewing corrected outcomes.
 
 The seven canonical exchange gaps remain unfilled. Any affected week remains in the primary evaluation because the next available open is the first observable executable price. Results excluding the three affected ISO weeks will be a labelled data-quality sensitivity, never the canonical result.
 
@@ -75,13 +77,13 @@ Use expanding training windows with three non-overlapping 24-week validation win
 
 | Fold | Training `[start, end)` | Validation `[start, end)` |
 |---|---|---|
-| 1 | 2021-05-24 → 2024-01-01 | 2024-01-01 → 2024-06-17 |
-| 2 | 2021-05-24 → 2024-06-17 | 2024-06-17 → 2024-12-02 |
-| 3 | 2021-05-24 → 2024-12-02 | 2024-12-02 → 2025-05-19 |
+| 1 | 2021-05-31 → 2024-01-01 | 2024-01-01 → 2024-06-17 |
+| 2 | 2021-05-31 → 2024-06-17 | 2024-06-17 → 2024-12-02 |
+| 3 | 2021-05-31 → 2024-12-02 | 2024-12-02 → 2025-05-19 |
 
 Each fold ranks the same 18 candidates on training data only and sends exactly the top candidate into the next validation window. A candidate needs at least 30 completed training trades. If no candidate qualifies or any validation fold cannot complete, stop without opening the holdout.
 
-After the three fold artifacts are sealed, perform one final fit on all pre-holdout data, 2021-05-24 through 2025-05-19, using the same grid and objective. That produces exactly one selected candidate for the holdout. Earlier validation periods may enter later expanding training windows; no future validation or holdout bar may enter an earlier training calculation.
+After the three fold artifacts are sealed, perform one final fit on all pre-holdout evaluation data, 2021-05-31 through 2025-05-19, using the same grid and objective. That produces exactly one selected candidate for the holdout. Earlier validation periods may enter later expanding training windows; no future validation or holdout bar may enter an earlier training calculation.
 
 Features must be computed with canonical history preceding each fold. Supply at least one complete prior ISO week, reset cash and positions at the fold start, and permit signals and entries only within the fold. Boundaries are Monday-aligned, so a trade or Monday range is never split across folds.
 
