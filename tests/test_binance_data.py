@@ -10,7 +10,7 @@ import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from src.binance_data import _parse_klines_response, download_klines
+from src.binance_data import _parse_klines_response, download_klines, filter_completed_klines
 
 
 class BinanceParserTests(unittest.TestCase):
@@ -35,6 +35,16 @@ class BinanceParserTests(unittest.TestCase):
 
 
 class BinanceDownloadTests(unittest.TestCase):
+    def test_completed_filter_uses_nominal_interval_end(self) -> None:
+        df = _parse_klines_response([
+            [1704067200000, "100", "101", "99", "100", "1", 1704070799999, "100", 1, "0.5", "50", "0"],
+            [1704070800000, "100", "101", "99", "100", "1", 1704074399999, "100", 1, "0.5", "50", "0"],
+        ])
+        before = filter_completed_klines(df, "1h", "2024-01-01T01:59:59.999Z")
+        at_boundary = filter_completed_klines(df, "1h", "2024-01-01T02:00:00Z")
+        self.assertEqual(len(before), 1)
+        self.assertEqual(len(at_boundary), 2)
+
     def test_download_klines_paginates_1000_and_uses_cache_csv(self) -> None:
         start_ms = 1704067200000
         step_ms = 60 * 60 * 1000

@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.binance_data import download_klines, SUPPORTED_SYMBOLS, SUPPORTED_INTERVALS
+from src.binance_data import (
+    download_klines,
+    filter_completed_klines,
+    SUPPORTED_SYMBOLS,
+    SUPPORTED_INTERVALS,
+)
 from src.binance_cache import (
     resolve_time_window,
     load_cache_csv,
@@ -35,6 +40,7 @@ def run_cache_update(
 
     cache_path = Path(cache_dir) / f"{symbol}_{interval}.csv"
     existing = load_cache_csv(cache_path)
+    existing = filter_completed_klines(existing, interval, now_utc)
 
     incoming_parts: list[pd.DataFrame] = []
     if force:
@@ -50,8 +56,11 @@ def run_cache_update(
         )
         base = pd.DataFrame(columns=existing.columns if len(existing.columns) else None)
     else:
+        # Re-query the most recent completed candle because a previous cache
+        # may have captured it while it was still forming.
+        range_basis = existing.iloc[:-1].copy() if len(existing) else existing
         ranges = build_incremental_fetch_ranges(
-            cache_df=existing,
+            cache_df=range_basis,
             start_utc=start_utc,
             end_utc=end_utc,
             interval=interval,

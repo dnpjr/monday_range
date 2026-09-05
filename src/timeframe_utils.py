@@ -78,6 +78,7 @@ def _normalize_ohlcv_frame(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("OHLCV frame must have DatetimeIndex or open_time column.")
 
     out = out.sort_index()
+    out = out[~out.index.duplicated(keep="last")]
     for c in ("open", "high", "low", "close"):
         if c not in out.columns:
             raise ValueError(f"Missing required OHLC column: {c}")
@@ -134,7 +135,17 @@ def resample_ohlcv(
 
     if drop_incomplete_final and not bars.empty:
         counts = counts.reindex(bars.index).fillna(0).astype(int)
-        bars = bars[counts >= expected_count]
+        first_times = grouped["open"].apply(lambda series: series.index.min())
+        last_times = grouped["open"].apply(lambda series: series.index.max())
+        expected_last = bars.index + timeframe_to_timedelta(base_interval) * (expected_count - 1)
+        complete = (
+            (counts == expected_count)
+            & (first_times.reindex(bars.index) == bars.index)
+            & (last_times.reindex(bars.index) == expected_last)
+        )
+        dropped = [ts.isoformat() for ts in bars.index[~complete]]
+        bars = bars.loc[complete]
+        bars.attrs["dropped_incomplete_periods"] = dropped
 
     if "close_time" not in bars.columns:
         delta = timeframe_to_timedelta(target_interval)

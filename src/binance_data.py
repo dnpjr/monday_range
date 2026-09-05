@@ -139,6 +139,8 @@ def download_klines(
     *,
     use_cache: bool = True,
     cache_format: str = "parquet",
+    include_incomplete: bool = False,
+    now_utc: str | pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     """Download Binance public klines with 1000-row pagination.
 
@@ -152,7 +154,8 @@ def download_klines(
 
     cache_path = _cache_path(symbol, interval, start_ms, end_ms, cache_format)
     if use_cache and cache_path.exists():
-        return _load_cached(cache_path)
+        cached = _load_cached(cache_path)
+        return cached if include_incomplete else filter_completed_klines(cached, interval, now_utc)
 
     all_rows: list[list[Any]] = []
     cursor = start_ms
@@ -189,7 +192,23 @@ def download_klines(
         df = df[(df["open_time"] >= pd.to_datetime(start_ms, unit="ms", utc=True)) & (df["open_time"] < pd.to_datetime(end_ms, unit="ms", utc=True))]
         df = df.sort_values("open_time").drop_duplicates(subset=["open_time"], keep="last").reset_index(drop=True)
 
+    if not include_incomplete:
+        df = filter_completed_klines(df, interval, now_utc)
+
     if use_cache:
         _save_cached(df, cache_path)
 
     return df
+
+
+def filter_completed_klines(
+    frame: pd.DataFrame,
+    interval: str,
+    now_utc: str | pd.Timestamp | None = None,
+) -> pd.DataFrame:
+    if frame.empty:
+        return frame.copy()
+    now = pd.Timestamp.now(tz="UTC") if now_utc is None else pd.Timestamp(now_utc)
+    now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
+    complete = frame["open_time"] + pd.Timedelta(milliseconds=INTERVAL_MS[interval]) <= now
+    return frame.loc[complete].reset_index(drop=True)

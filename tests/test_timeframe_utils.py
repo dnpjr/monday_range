@@ -91,6 +91,29 @@ class TimeframeUtilsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             resample_ohlcv(df, base_interval="1h", target_interval="15m")
 
+    def test_missing_constituent_hour_drops_entire_period(self) -> None:
+        idx = pd.to_datetime([
+            "2024-01-01T00:00:00Z", "2024-01-01T01:00:00Z",
+            "2024-01-01T03:00:00Z", "2024-01-01T04:00:00Z",
+            "2024-01-01T05:00:00Z", "2024-01-01T06:00:00Z",
+            "2024-01-01T07:00:00Z",
+        ])
+        df = pd.DataFrame(
+            {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 1.0},
+            index=idx,
+        )
+        out = resample_ohlcv(df, base_interval="1h", target_interval="4h")
+        self.assertEqual(list(out.index), [pd.Timestamp("2024-01-01T04:00:00Z")])
+
+    def test_partial_first_and_final_periods_are_dropped(self) -> None:
+        idx = pd.date_range("2024-01-01T01:00:00Z", "2024-01-01T06:00:00Z", freq="1h")
+        df = pd.DataFrame(
+            {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 1.0},
+            index=idx,
+        )
+        out = resample_ohlcv(df, base_interval="1h", target_interval="4h")
+        self.assertTrue(out.empty)
+
 
 if __name__ == "__main__":
     unittest.main()
