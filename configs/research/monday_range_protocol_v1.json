@@ -1,0 +1,263 @@
+{
+  "protocol_version": "monday_range_protocol_v1",
+  "status": "frozen_before_corrected_results",
+  "amendment_history": [
+    {
+      "amendment": "development_start_complete_context_correction",
+      "previous_protocol_sha256": "5266a47fdf69e742ec455eb87986a423b3e5ae451757472558cac12d4e04d5ed",
+      "original_start_inclusive": "2021-05-24T00:00:00Z",
+      "amended_start_inclusive": "2021-05-31T00:00:00Z",
+      "reason": "The canonical dataset cannot provide a complete preceding ISO week for a 2021-05-24 training start.",
+      "timing": "Amended before any corrected canonical strategy performance was generated or viewed."
+    }
+  ],
+  "dataset": {
+    "version": "btcusdt_binance_spot_1h_v1",
+    "sha256": "4d541711c323ac82e07bade75a522c0a48776c7d2e4eec7f45d8d9c4e00b41ce",
+    "symbol": "BTCUSDT",
+    "venue": "Binance spot",
+    "base_interval": "1h",
+    "timezone": "UTC"
+  },
+  "partitions": {
+    "development": {
+      "start_inclusive": "2021-05-31T00:00:00Z",
+      "end_exclusive": "2024-01-01T00:00:00Z",
+      "complete_iso_weeks": 135
+    },
+    "validation": {
+      "start_inclusive": "2024-01-01T00:00:00Z",
+      "end_exclusive": "2025-05-19T00:00:00Z",
+      "complete_iso_weeks": 72
+    },
+    "holdout": {
+      "start_inclusive": "2025-05-19T00:00:00Z",
+      "end_exclusive": "2026-05-18T00:00:00Z",
+      "complete_iso_weeks": 52,
+      "access": "locked_until_protocol_executor_and_tests_are_committed"
+    },
+    "excluded_partial_weeks": [
+      {
+        "start_inclusive": "2021-05-21T15:00:00Z",
+        "end_exclusive": "2021-05-24T00:00:00Z"
+      },
+      {
+        "start_inclusive": "2026-05-18T00:00:00Z",
+        "end_exclusive": "2026-05-20T15:00:00Z"
+      }
+    ],
+    "initial_context_only": {
+      "start_inclusive": "2021-05-24T00:00:00Z",
+      "end_exclusive": "2021-05-31T00:00:00Z",
+      "complete_iso_weeks": 1
+    }
+  },
+  "hypothesis": {
+    "primary": "After BTCUSDT sweeps beyond the completed UTC Monday range and a completed hourly candle closes back inside, entering the fade at the next hourly open has positive expected weekly net portfolio return after the frozen transaction-cost model.",
+    "null": "The expected weekly net portfolio return of the frozen sweep-and-fade procedure is less than or equal to zero after costs.",
+    "unit_of_observation": "complete UTC ISO week",
+    "signal": "completed candle low below Monday low and close above Monday low for LONG, or high above Monday high and close below Monday high for SHORT",
+    "trade": "the first eligible signal in an ISO week that produces a non-zero position, entered at the following bar open"
+  },
+  "baseline": {
+    "strategy": "current_monday_range",
+    "direction": "both",
+    "entry_days_utc": [1, 2, 3],
+    "max_entry_day_utc": null,
+    "max_entry_hour_utc": null,
+    "one_trade_per_iso_week": true,
+    "signal_bar": "completed_previous_bar",
+    "entry_price": "next_bar_open_after_adverse_slippage",
+    "stop_mode": "swept_boundary_offset",
+    "stop_range_fraction": 1.0,
+    "tp1_range_fraction": 0.5,
+    "tp2_range_fraction": 1.0,
+    "tp1_close_fraction": 0.5,
+    "move_stop_to_breakeven_after_tp1": true,
+    "breakeven_includes_fees": false,
+    "exit_style": "partial_tp2",
+    "single_target_mode": false,
+    "single_target_level": "tp2",
+    "friday_cutoff_hour_utc": 23,
+    "min_range_pct": null,
+    "max_range_pct": null,
+    "sma_period": null,
+    "risk_fraction": 0.01,
+    "risk_base": "current_equity",
+    "max_leverage": 1.0,
+    "fee_bps_per_fill": 10.0,
+    "slippage_bps_per_fill": 5.0,
+    "spread_model": "included_in_slippage",
+    "intrabar_policy": "conservative_stop_first",
+    "gap_fill_policy": "bar_open_when_opened_through_trigger_then_apply_adverse_slippage",
+    "terminal_exit": "end_of_data_with_normal_exit_costs",
+    "accounting_version": "marked_equity_v1",
+    "mark_price": "bar_close",
+    "initial_capital": 10000.0
+  },
+  "parameter_search": {
+    "cartesian_product": true,
+    "candidate_count": 18,
+    "parameters": {
+      "stop_range_fraction": [0.75, 1.0, 1.25],
+      "max_entry_day_utc": [2, 3],
+      "target_plan": [
+        {
+          "id": "midpoint_half_then_opposite",
+          "exit_style": "partial_tp2",
+          "tp1_range_fraction": 0.5,
+          "tp2_range_fraction": 1.0,
+          "tp1_close_fraction": 0.5,
+          "single_target_level": "tp2"
+        },
+        {
+          "id": "full_at_midpoint",
+          "exit_style": "single_target",
+          "tp1_range_fraction": 0.5,
+          "tp2_range_fraction": 1.0,
+          "tp1_close_fraction": 1.0,
+          "single_target_level": "tp1"
+        },
+        {
+          "id": "full_at_opposite_boundary",
+          "exit_style": "single_target",
+          "tp1_range_fraction": 0.5,
+          "tp2_range_fraction": 1.0,
+          "tp1_close_fraction": 1.0,
+          "single_target_level": "tp2"
+        }
+      ]
+    },
+    "fixed_during_selection": [
+      "dataset", "signal_definition", "direction", "risk_fraction", "risk_base",
+      "max_leverage", "fee_bps_per_fill", "slippage_bps_per_fill",
+      "intrabar_policy", "gap_fill_policy", "accounting_version",
+      "friday_cutoff_hour_utc", "range_filters", "sma_period"
+    ]
+  },
+  "walk_forward": {
+    "method": "expanding_training_non_overlapping_validation",
+    "validation_window_weeks": 24,
+    "step_weeks": 24,
+    "selection_count_per_fold": 1,
+    "minimum_training_trades": 30,
+    "folds": [
+      {
+        "id": 1,
+        "train_start_inclusive": "2021-05-31T00:00:00Z",
+        "train_end_exclusive": "2024-01-01T00:00:00Z",
+        "validation_start_inclusive": "2024-01-01T00:00:00Z",
+        "validation_end_exclusive": "2024-06-17T00:00:00Z"
+      },
+      {
+        "id": 2,
+        "train_start_inclusive": "2021-05-31T00:00:00Z",
+        "train_end_exclusive": "2024-06-17T00:00:00Z",
+        "validation_start_inclusive": "2024-06-17T00:00:00Z",
+        "validation_end_exclusive": "2024-12-02T00:00:00Z"
+      },
+      {
+        "id": 3,
+        "train_start_inclusive": "2021-05-31T00:00:00Z",
+        "train_end_exclusive": "2024-12-02T00:00:00Z",
+        "validation_start_inclusive": "2024-12-02T00:00:00Z",
+        "validation_end_exclusive": "2025-05-19T00:00:00Z"
+      }
+    ],
+    "context_rule": "compute features from canonical history with at least one complete preceding ISO week, reset portfolio at the fold start, and permit signals and entries only inside the fold",
+    "final_fit": "after walk-forward artifacts are sealed, rank the same 18 candidates on all pre-holdout evaluation data from 2021-05-31T00:00:00Z and select exactly one using the frozen objective",
+    "failure_rule": "if no candidate meets the minimum trade count or fewer than three validation folds complete, stop without opening the holdout"
+  },
+  "selection_objective": {
+    "eligibility": "at least 30 completed trades in the training window",
+    "formula": "net_cagr - 0.50 * abs(max_drawdown) - annualized_cost_drag_fraction - 0.0005 * annualized_turnover_multiple",
+    "units": "all return, drawdown, and cost terms expressed as fractions, not percentages",
+    "annualized_cost_drag_fraction": "(fees + explicit slippage cost) / average_marked_equity / elapsed_years",
+    "annualized_turnover_multiple": "total_traded_notional / average_marked_equity / elapsed_years",
+    "tie_breakers": [
+      "higher Sortino ratio",
+      "smaller absolute maximum drawdown",
+      "lower annualized turnover multiple",
+      "lexicographically smaller stable candidate id"
+    ]
+  },
+  "cost_scenarios": {
+    "baseline": {"fee_bps_per_fill": 10.0, "slippage_bps_per_fill": 5.0},
+    "stress_1_5x": {"fee_bps_per_fill": 15.0, "slippage_bps_per_fill": 7.5},
+    "stress_2x": {"fee_bps_per_fill": 20.0, "slippage_bps_per_fill": 10.0}
+  },
+  "intrabar_scenarios": {
+    "canonical": "conservative_stop_first",
+    "optimistic_sensitivity_only": "target_first"
+  },
+  "evaluation_metrics": {
+    "primary": [
+      "mean_weekly_net_return_with_95pct_block_bootstrap_interval",
+      "net_cagr",
+      "maximum_drawdown"
+    ],
+    "null_rejection_rule": "lower 95% block-bootstrap bound for mean weekly net return is greater than zero",
+    "secondary_portfolio": [
+      "sortino_ratio", "sharpe_ratio", "profit_factor", "total_return",
+      "annualized_volatility", "gross_exposure", "net_exposure",
+      "annualized_turnover", "total_fees", "explicit_slippage_cost",
+      "maximum_leverage_used", "fraction_of_entries_capped_by_leverage"
+    ],
+    "trade_statistics": [
+      "trade_count", "win_rate", "mean_net_trade_return",
+      "median_net_trade_return", "mean_pnl", "median_pnl",
+      "mean_holding_time", "median_holding_time",
+      "exit_reason_distribution", "long_short_decomposition"
+    ]
+  },
+  "robustness": {
+    "required": [
+      "three_walk_forward_validation_folds",
+      "calendar_year_subperiods",
+      "non_overlapping_24_week_subperiods",
+      "parameter_neighborhood_within_frozen_grid",
+      "long_only_and_short_only_decomposition",
+      "1_5x_and_2x_cost_stress",
+      "target_first_intrabar_sensitivity",
+      "exclude_three_iso_weeks_containing_canonical_exchange_gaps"
+    ],
+    "optional_after_v1_is_sealed": [
+      "deterministically_resampled_4h_timeframe",
+      "ETHUSDT_external_market"
+    ],
+    "selection_rule": "robustness results are diagnostics and cannot select an alternative winner"
+  },
+  "uncertainty": {
+    "resampling_unit": "complete UTC ISO week",
+    "method": "moving_block_bootstrap",
+    "block_length_weeks": 4,
+    "replications": 10000,
+    "random_seed": 20260905,
+    "confidence_level": 0.95,
+    "reported_intervals": [
+      "mean_weekly_net_return",
+      "annualized_net_return",
+      "maximum_drawdown",
+      "average_trade_net_return"
+    ]
+  },
+  "holdout_policy": {
+    "pre_registered_runs": ["fixed_baseline", "single_final_selected_candidate"],
+    "primary_configuration": "single_final_selected_candidate",
+    "unlock_requires": [
+      "protocol executor committed",
+      "protocol validation tests passing",
+      "walk-forward and final-fit artifacts sealed",
+      "chosen candidate recorded before holdout access"
+    ],
+    "after_first_access": "no parameter, objective, partition, cost, or execution change is permitted",
+    "methodology_change_rule": "the holdout becomes development data and a new untouched dataset period is required"
+  },
+  "experiment_bundle_required_fields": [
+    "protocol_version", "protocol_config_sha256", "dataset_version", "dataset_sha256",
+    "code_commit", "partitions", "baseline_configuration", "candidate_space",
+    "selection_objective", "cost_scenarios", "walk_forward_configuration",
+    "chosen_candidate", "all_oos_metrics", "robustness_results",
+    "uncertainty_results", "charts", "run_timestamp_utc"
+  ]
+}

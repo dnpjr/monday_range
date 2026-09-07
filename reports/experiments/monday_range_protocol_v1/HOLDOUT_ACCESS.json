@@ -1,0 +1,13 @@
+{
+  "allowed_holdout_runs": [
+    "fixed_baseline",
+    "single_final_selected_candidate"
+  ],
+  "artifact_hash": "5e4bc2df03939220a0f878bdcb8986c554cd8d2596f741b7c589e954d532d68f",
+  "authorized_at_utc": "2026-09-05T21:38:50.776003+00:00",
+  "candidate_artifact_hash": "37e9e7c6d0386791556f5566d257a776ec09c11f1398a17b1d70cd89754097c0",
+  "candidate_id": "mr1_stop125_day2_full_at_midpoint",
+  "dataset_hash": "4d541711c323ac82e07bade75a522c0a48776c7d2e4eec7f45d8d9c4e00b41ce",
+  "protocol_hash": "da0d41ce67d445bcb308012bf323d2e573d246a7a1fd3eb57c9ee6bc951d4cf3",
+  "run_id": "canonical_20260905_3528492"
+}

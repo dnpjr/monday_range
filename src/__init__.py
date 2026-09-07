@@ -1,0 +1,1 @@
+"""Monday Range research package."""

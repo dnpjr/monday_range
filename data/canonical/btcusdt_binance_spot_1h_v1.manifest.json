@@ -1,0 +1,138 @@
+{
+  "chronologically_sorted": true,
+  "completion_rule": "open_time + interval <= retrieval_timestamp",
+  "data_file": "btcusdt_binance_spot_1h_v1.csv",
+  "dataset_version": "btcusdt_binance_spot_1h_v1",
+  "derived_views": {
+    "1d": {
+      "dropped_incomplete_periods": [
+        "2021-05-21T00:00:00+00:00",
+        "2021-08-13T00:00:00+00:00",
+        "2021-09-29T00:00:00+00:00",
+        "2023-03-24T00:00:00+00:00",
+        "2026-05-20T00:00:00+00:00"
+      ],
+      "first": "2021-05-22T00:00:00+00:00",
+      "last": "2026-05-19T00:00:00+00:00",
+      "rows": 1821,
+      "sha256": "91d4378dd3463e3e1504281e2e12199030d957710f342c4fd266cc985a5b8f83"
+    },
+    "4h": {
+      "dropped_incomplete_periods": [
+        "2021-05-21T12:00:00+00:00",
+        "2021-08-13T00:00:00+00:00",
+        "2021-08-13T04:00:00+00:00",
+        "2021-09-29T04:00:00+00:00",
+        "2021-09-29T08:00:00+00:00",
+        "2023-03-24T12:00:00+00:00",
+        "2026-05-20T12:00:00+00:00"
+      ],
+      "first": "2021-05-21T16:00:00+00:00",
+      "last": "2026-05-20T08:00:00+00:00",
+      "rows": 10944,
+      "sha256": "dbbb7703128974b78fdac0ea825bd9a16f2d2b834011e41c2539879dc481424f"
+    }
+  },
+  "duplicate_count": 0,
+  "final_candle_completeness_checked": true,
+  "first_timestamp": "2021-05-21T15:00:00+00:00",
+  "forward_filled": false,
+  "gap_investigation": [
+    {
+      "authoritative_result": "Binance spot API omits these hours while returning 01:00 and 06:00.",
+      "decision": "Preserve the four-hour gap; do not synthesize candles.",
+      "event": "Scheduled Binance spot trading system upgrade beginning 02:00 UTC.",
+      "timestamps": [
+        "2021-08-13T02:00:00+00:00",
+        "2021-08-13T03:00:00+00:00",
+        "2021-08-13T04:00:00+00:00",
+        "2021-08-13T05:00:00+00:00"
+      ]
+    },
+    {
+      "authoritative_result": "Binance spot API omits these hours while returning 06:00 and 09:00.",
+      "decision": "Preserve the two-hour gap; do not synthesize candles.",
+      "event": "Scheduled Binance spot trading system upgrade beginning 07:00 UTC.",
+      "timestamps": [
+        "2021-09-29T07:00:00+00:00",
+        "2021-09-29T08:00:00+00:00"
+      ]
+    },
+    {
+      "authoritative_result": "Binance spot API omits 13:00 while returning a shortened zero-volume 12:00 candle and 14:00.",
+      "decision": "Preserve the one-hour gap and the authoritative 12:00 candle; do not synthesize data.",
+      "event": "Binance suspended spot trading after a matching-engine issue.",
+      "timestamps": [
+        "2023-03-24T13:00:00+00:00"
+      ]
+    }
+  ],
+  "generator_commit": "886c482073f83e492b482b361e97cd75fb08a1fd",
+  "incomplete_candles_removed": 0,
+  "interpolated": false,
+  "interval": "1h",
+  "last_timestamp": "2026-05-20T14:00:00+00:00",
+  "legacy_comparisons": {
+    "lab_1h": {
+      "canonical_only_rows": 24,
+      "differing_shared_ohlcv_rows": 0,
+      "first": "2021-05-22T15:00:00+00:00",
+      "last": "2026-05-21T14:00:00+00:00",
+      "legacy_only_rows": 24,
+      "rows": 43793,
+      "sha256": "8321bc7a19e16c0e66349d60faa9bdef37ded649998443f35536c10fc3c15fb1",
+      "shared_rows": 43769
+    },
+    "monday_1h": {
+      "canonical_only_rows": 0,
+      "differing_shared_ohlcv_rows": 1,
+      "first": "2021-05-21T15:00:00+00:00",
+      "last": "2026-05-20T14:00:00+00:00",
+      "legacy_only_rows": 0,
+      "rows": 43793,
+      "sha256": "9700a97dd4db2c1efe97395d5b3973cbca7c3f3e034bba33f58e840d86d947ed",
+      "shared_rows": 43793
+    }
+  },
+  "market_type": "spot",
+  "missing_timestamp_count": 7,
+  "missing_timestamps": [
+    "2021-08-13T02:00:00+00:00",
+    "2021-08-13T03:00:00+00:00",
+    "2021-08-13T04:00:00+00:00",
+    "2021-08-13T05:00:00+00:00",
+    "2021-09-29T07:00:00+00:00",
+    "2021-09-29T08:00:00+00:00",
+    "2023-03-24T13:00:00+00:00"
+  ],
+  "ohlcv_validation": {
+    "invalid_numeric_count": 0,
+    "invalid_ohlcv_count": 0,
+    "invalid_row_count": 0,
+    "missing_columns": [],
+    "passed": true
+  },
+  "resampling_policy": {
+    "closed": "left",
+    "incomplete_periods": "drop if any expected 1h timestamp is absent",
+    "label": "left",
+    "ohlcv": {
+      "close": "last",
+      "high": "max",
+      "low": "min",
+      "open": "first",
+      "volume": "sum"
+    },
+    "source_interval": "1h",
+    "utc_anchored": true
+  },
+  "retrieval_timestamp": "2026-09-05T16:32:18.496470+00:00",
+  "row_count": 43793,
+  "sha256": "4d541711c323ac82e07bade75a522c0a48776c7d2e4eec7f45d8d9c4e00b41ce",
+  "source_endpoint": "https://api.binance.com/api/v3/klines",
+  "symbol": "BTCUSDT",
+  "timezone": "UTC",
+  "unique_timestamps": true,
+  "venue": "Binance spot",
+  "window_end_exclusive": "2026-05-20T15:00:00+00:00"
+}

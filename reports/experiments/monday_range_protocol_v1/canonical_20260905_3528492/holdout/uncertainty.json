@@ -1,0 +1,44 @@
+{
+  "artifact_hash": "354b0405179bcb36a690e197bb4d12b57f7946b9ee89cce341a24f0088013eed",
+  "block_length_weeks": 4,
+  "candidate_id": "mr1_stop125_day2_full_at_midpoint",
+  "confirmatory_null_test": true,
+  "method": "moving_block_bootstrap",
+  "percentile_2_5": -0.0005633948590378089,
+  "percentile_50": 0.00024211217559910628,
+  "percentile_97_5": 0.0009157384577398192,
+  "point_estimate": 0.00029628785191013624,
+  "reject_null": false,
+  "replications": 10000,
+  "sample_weeks": 52,
+  "seed": 20260905,
+  "source_artifact": "holdout/canonical_results.json",
+  "source_stage": "untouched_holdout_selected_candidate",
+  "statistics": {
+    "annualized_net_return": {
+      "percentile_2_5": -0.029368289763399877,
+      "percentile_50": 0.012375187147083522,
+      "percentile_97_5": 0.04856702840756243,
+      "point_estimate": 0.015247909821012096
+    },
+    "average_trade_net_return": {
+      "percentile_2_5": -0.005666044219195034,
+      "percentile_50": -0.00010280670770567597,
+      "percentile_97_5": 0.004290456550693473,
+      "point_estimate": 0.00010383011314389305
+    },
+    "maximum_drawdown": {
+      "percentile_2_5": -0.042997196718875946,
+      "percentile_50": -0.018101863188146328,
+      "percentile_97_5": -0.008333182436466413,
+      "point_estimate": -0.018200606592246982
+    },
+    "mean_weekly_net_return": {
+      "percentile_2_5": -0.0005633948590378089,
+      "percentile_50": 0.00024211217559910628,
+      "percentile_97_5": 0.0009157384577398192,
+      "point_estimate": 0.00029628785191013624
+    }
+  },
+  "unit": "complete_utc_iso_week"
+}
